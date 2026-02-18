@@ -50,19 +50,18 @@ export async function createTeamAction(formData: FormData) {
   }
 
   const { supabase, user } = await requireUser();
+  const teamId = crypto.randomUUID();
 
-  const { data: team, error: teamError } = await supabase
+  const { error: teamError } = await supabase
     .from("teams")
-    .insert({ name: teamName, created_by: user.id })
-    .select("id")
-    .single();
+    .insert({ id: teamId, name: teamName, created_by: user.id });
 
-  if (teamError || !team) {
+  if (teamError) {
     redirect(withQuery("/app", { error: toPublicErrorMessage(teamError, "Failed to create team.") }));
   }
 
   const { error: memberError } = await supabase.from("team_members").insert({
-    team_id: team.id,
+    team_id: teamId,
     user_id: user.id,
     role: "admin",
   });

@@ -138,6 +138,7 @@ function TaskDetailModal({
   const [milestoneCandidates, setMilestoneCandidates] = useState<MilestoneCandidate[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
@@ -175,8 +176,9 @@ function TaskDetailModal({
   const fetchComments = useCallback(async () => {
     setLoadingComments(true);
     const res = await fetch(`/api/tasks/${task.id}/comments`);
-    const json = (await res.json()) as { comments?: CommentItem[] };
+    const json = (await res.json()) as { comments?: CommentItem[]; currentUserId?: string };
     setComments(json.comments ?? []);
+    setCurrentUserId(json.currentUserId ?? null);
     setLoadingComments(false);
   }, [task.id]);
 
@@ -234,6 +236,40 @@ function TaskDetailModal({
         return;
       }
       setCommentBody("");
+      await fetchComments();
+    });
+  };
+
+  const editComment = (comment: CommentItem) => {
+    const nextBody = window.prompt("Edit comment", comment.body);
+    if (!nextBody || !nextBody.trim()) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/comments/${comment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: nextBody.trim() }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to edit comment.");
+        return;
+      }
+      await fetchComments();
+    });
+  };
+
+  const deleteComment = (comment: CommentItem) => {
+    const ok = window.confirm("Delete this comment?");
+    if (!ok) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/comments/${comment.id}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to delete comment.");
+        return;
+      }
       await fetchComments();
     });
   };
@@ -439,6 +475,24 @@ function TaskDetailModal({
                 <p className="mt-1 text-slate-500">
                   {comment.author_id} / {new Date(comment.created_at).toLocaleString()}
                 </p>
+                {currentUserId === comment.author_id ? (
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => editComment(comment)}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteComment(comment)}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
             {!loadingComments && comments.length === 0 ? (

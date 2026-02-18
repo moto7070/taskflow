@@ -1017,7 +1017,7 @@ export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProp
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="space-y-1">
           <p className="text-sm text-slate-500">
             Drag and drop tasks to reorder or move between columns.
@@ -1026,7 +1026,7 @@ export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProp
             <p className="text-xs text-amber-600">Reordering is disabled while a milestone filter is active.</p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="milestone-filter" className="text-xs text-slate-600">
             Milestone
           </label>

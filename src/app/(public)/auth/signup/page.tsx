@@ -25,8 +25,11 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
       <form action={signupAction} className="mt-8 space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <label htmlFor="signup-email" className="mb-1 block text-sm font-medium text-slate-700">
+            Email
+          </label>
           <input
+            id="signup-email"
             name="email"
             type="email"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
@@ -35,8 +38,11 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+          <label htmlFor="signup-password" className="mb-1 block text-sm font-medium text-slate-700">
+            Password
+          </label>
           <input
+            id="signup-password"
             name="password"
             type="password"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"

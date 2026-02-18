@@ -31,8 +31,11 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
 
       <form action={forgotPasswordAction} className="mt-8 space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <label htmlFor="forgot-email" className="mb-1 block text-sm font-medium text-slate-700">
+            Email
+          </label>
           <input
+            id="forgot-email"
             name="email"
             type="email"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"

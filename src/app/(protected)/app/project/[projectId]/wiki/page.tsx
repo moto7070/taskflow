@@ -39,7 +39,7 @@ export default async function ProjectWikiPage({ params }: ProjectWikiPageProps) 
     <main className="min-h-screen bg-slate-50 px-6 py-8">
       <div className="mx-auto w-full max-w-6xl space-y-4">
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold text-slate-900">
                 {project?.name ?? "Project"} Wiki

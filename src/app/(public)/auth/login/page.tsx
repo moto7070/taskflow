@@ -20,7 +20,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6 py-12">
       <h1 className="text-2xl font-semibold text-slate-900">ログイン</h1>
-      <p className="mt-2 text-sm text-slate-600">まずはEmailログインで開始します（Googleは後続対応）。</p>
+      <p className="mt-2 text-sm text-slate-600">EmailまたはGoogleでログインできます。</p>
 
       {message ? (
         <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
@@ -33,8 +33,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
       <form action={loginAction} className="mt-8 space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-slate-700">
+            Email
+          </label>
           <input
+            id="login-email"
             name="email"
             type="email"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"
@@ -43,8 +46,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+          <label htmlFor="login-password" className="mb-1 block text-sm font-medium text-slate-700">
+            Password
+          </label>
           <input
+            id="login-password"
             name="password"
             type="password"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"

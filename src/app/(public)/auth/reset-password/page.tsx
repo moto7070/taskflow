@@ -25,8 +25,11 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
 
       <form action={resetPasswordAction} className="mt-8 space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">New Password</label>
+          <label htmlFor="reset-password" className="mb-1 block text-sm font-medium text-slate-700">
+            New Password
+          </label>
           <input
+            id="reset-password"
             name="password"
             type="password"
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring"

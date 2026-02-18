@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { updateSubtaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -43,6 +44,11 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ taskId: string; subtaskId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, subtaskId } = await params;
   const parsed = updateSubtaskSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -83,9 +89,14 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _: Request,
+  req: Request,
   { params }: { params: Promise<{ taskId: string; subtaskId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, subtaskId } = await params;
 
   const supabase = await createClient();

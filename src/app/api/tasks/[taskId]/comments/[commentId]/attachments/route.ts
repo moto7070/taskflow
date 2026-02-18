@@ -6,6 +6,7 @@ import {
   getCommentAttachmentMaxBytes,
   getCommentAttachmentsBucket,
 } from "@/lib/env";
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
@@ -98,6 +99,11 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, commentId } = await params;
   const supabase = await createClient();
   const {

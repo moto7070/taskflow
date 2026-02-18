@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { updateCommentSchema } from "@/lib/validations/api";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -44,6 +45,11 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, commentId } = await params;
   const parsed = updateCommentSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -98,6 +104,11 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, commentId } = await params;
   const supabase = await createClient();
   const {

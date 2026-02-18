@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { toggleReactionSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -41,6 +42,11 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, commentId } = await params;
   const parsed = toggleReactionSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

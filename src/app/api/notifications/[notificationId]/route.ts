@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { updateNotificationSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -7,6 +8,11 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ notificationId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { notificationId } = await params;
   const parsed = updateNotificationSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

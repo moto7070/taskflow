@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { updateTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -95,6 +96,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId } = await params;
   const parsed = updateTaskSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

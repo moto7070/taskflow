@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -34,6 +35,11 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { projectId } = await params;
   const parsed = createWikiPageSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

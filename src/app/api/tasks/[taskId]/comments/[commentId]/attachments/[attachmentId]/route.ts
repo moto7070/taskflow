@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
@@ -39,9 +40,14 @@ async function canAccessTask(taskId: string, userId: string) {
 }
 
 export async function DELETE(
-  _: Request,
+  req: Request,
   { params }: { params: Promise<{ taskId: string; commentId: string; attachmentId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId, commentId, attachmentId } = await params;
   const supabase = await createClient();
   const {

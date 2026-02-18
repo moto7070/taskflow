@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { updateWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -34,6 +35,11 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ projectId: string; pageId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { projectId, pageId } = await params;
   const parsed = updateWikiPageSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -113,6 +119,11 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ projectId: string; pageId: string }> },
 ) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { projectId, pageId } = await params;
 
   const supabase = await createClient();

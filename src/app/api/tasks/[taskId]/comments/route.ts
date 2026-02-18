@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import { verifyCsrfOrigin } from "@/lib/security/csrf";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import type { ReactionSummaryItem } from "@/lib/types/domain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -190,6 +191,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
+  const csrf = verifyCsrfOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: csrf.error }, { status: 403 });
+  }
+
   const { taskId } = await params;
   const parsed = createCommentSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });

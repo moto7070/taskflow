@@ -42,7 +42,7 @@ async function canAccessTask(taskId: string, userId: string) {
     .select("project_id")
     .eq("id", taskId)
     .maybeSingle();
-  if (!task) return false;
+  if (!task) return { ok: false as const };
 
   const { data: projectMember } = await supabase
     .from("project_members")
@@ -50,14 +50,14 @@ async function canAccessTask(taskId: string, userId: string) {
     .eq("project_id", task.project_id)
     .eq("user_id", userId)
     .maybeSingle();
-  if (projectMember) return true;
+  if (projectMember) return { ok: true as const, projectId: task.project_id };
 
   const { data: project } = await supabase
     .from("projects")
     .select("team_id")
     .eq("id", task.project_id)
     .maybeSingle();
-  if (!project) return false;
+  if (!project) return { ok: false as const };
 
   const { data: teamMember } = await supabase
     .from("team_members")
@@ -66,7 +66,32 @@ async function canAccessTask(taskId: string, userId: string) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  return teamMember?.role === "admin";
+  if (teamMember?.role === "admin") return { ok: true as const, projectId: task.project_id };
+  return { ok: false as const };
+}
+
+async function resolveMentionedUserIds(projectId: string, body: string) {
+  const supabase = await createClient();
+  const bodyLower = body.toLowerCase();
+
+  const { data: members } = await supabase
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", projectId);
+  const ids = Array.from(new Set((members ?? []).map((member) => member.user_id)));
+  if (ids.length === 0) return [];
+
+  const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", ids);
+  const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile.display_name]));
+
+  const mentionedIds: string[] = [];
+  for (const id of ids) {
+    const label = profileMap.get(id) ?? id.slice(0, 8);
+    if (bodyLower.includes(`@${label.toLowerCase()}`)) {
+      mentionedIds.push(id);
+    }
+  }
+  return mentionedIds;
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -77,8 +102,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const canAccess = await canAccessTask(taskId, user.id);
-  if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await canAccessTask(taskId, user.id);
+  if (!access.ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { data: comments, error } = await supabase
     .from("task_comments")
@@ -185,8 +210,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const canAccess = await canAccessTask(taskId, user.id);
-  if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await canAccessTask(taskId, user.id);
+  if (!access.ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let parentCommentId: string | null = null;
   if (typeof payload.parent_comment_id === "string" && payload.parent_comment_id.trim().length > 0) {
@@ -214,5 +239,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const mentionedUserIds = (await resolveMentionedUserIds(access.projectId, body)).filter(
+    (mentionedUserId) => mentionedUserId !== user.id,
+  );
+  if (mentionedUserIds.length > 0) {
+    const admin = createAdminClient();
+    await admin.from("notifications").insert(
+      mentionedUserIds.map((mentionedUserId) => ({
+        user_id: mentionedUserId,
+        project_id: access.projectId,
+        task_id: taskId,
+        comment_id: data.id,
+        type: "mention",
+        body: `${user.email ?? "A member"} mentioned you in a comment`,
+        metadata: { task_id: taskId, comment_id: data.id },
+      })),
+    );
+  }
+
   return NextResponse.json({ comment: data });
 }

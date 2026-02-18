@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getAppUrl } from "@/lib/app-url";
+import { writeAuditLog } from "@/lib/server/audit-log";
 import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { sendInviteMail } from "@/lib/server/invite-email";
 import { createClient } from "@/utils/supabase/server";
@@ -150,6 +151,17 @@ export async function inviteMemberAction(formData: FormData) {
     );
   }
 
+  await writeAuditLog(supabase, {
+    teamId,
+    actorUserId: user.id,
+    action: "team.member_invited",
+    targetType: "invitation",
+    metadata: {
+      invited_email: email,
+      role: normalizedRole,
+    },
+  });
+
   const inviteUrl = `${getAppUrl()}/invite/${token}`;
   const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
   const teamName = team?.name ?? "your team";
@@ -202,6 +214,17 @@ export async function updateMemberRoleAction(formData: FormData) {
     );
   }
 
+  await writeAuditLog(supabase, {
+    teamId,
+    actorUserId: user.id,
+    action: "team.member_role_updated",
+    targetType: "team_member",
+    targetId: memberId,
+    metadata: {
+      role: role === "admin" ? "admin" : "user",
+    },
+  });
+
   redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Role updated." }));
 }
 
@@ -236,6 +259,14 @@ export async function removeMemberAction(formData: FormData) {
       }),
     );
   }
+
+  await writeAuditLog(supabase, {
+    teamId,
+    actorUserId: user.id,
+    action: "team.member_removed",
+    targetType: "team_member",
+    targetId: memberId,
+  });
 
   redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Member removed." }));
 }

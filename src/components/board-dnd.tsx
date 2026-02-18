@@ -70,6 +70,12 @@ interface MilestoneCandidate {
   due_date: string;
 }
 
+interface MentionCandidate {
+  id: string;
+  display_name: string | null;
+  label: string;
+}
+
 interface BoardDndProps {
   projectId: string;
   initialColumns: BoardColumn[];
@@ -149,6 +155,8 @@ function TaskDetailModal({
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
+  const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
   const [loadingComments, setLoadingComments] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
@@ -246,8 +254,39 @@ function TaskDetailModal({
         return;
       }
       setCommentBody("");
+      setMentionQuery(null);
+      setMentionCandidates([]);
       await fetchComments();
     });
+  };
+
+  const fetchMentionCandidates = useCallback(
+    async (query: string) => {
+      const res = await fetch(`/api/mentions?taskId=${task.id}&q=${encodeURIComponent(query)}`);
+      const json = (await res.json()) as { candidates?: MentionCandidate[] };
+      setMentionCandidates(json.candidates ?? []);
+    },
+    [task.id],
+  );
+
+  const onCommentBodyChange = (nextValue: string) => {
+    setCommentBody(nextValue);
+    const match = nextValue.match(/(?:^|\s)@([^\s@]{1,30})$/);
+    const query = match?.[1] ?? null;
+    setMentionQuery(query);
+    if (query) {
+      void fetchMentionCandidates(query);
+      return;
+    }
+    setMentionCandidates([]);
+  };
+
+  const applyMention = (candidate: MentionCandidate) => {
+    const currentValue = commentBody;
+    const nextValue = currentValue.replace(/@([^\s@]{1,30})$/, `@${candidate.label} `);
+    setCommentBody(nextValue);
+    setMentionQuery(null);
+    setMentionCandidates([]);
   };
 
   const postReply = (parentCommentId: string) => {
@@ -504,10 +543,27 @@ function TaskDetailModal({
           <div className="mt-2 space-y-2">
             <textarea
               value={commentBody}
-              onChange={(e) => setCommentBody(e.target.value)}
+              onChange={(e) => onCommentBodyChange(e.target.value)}
               className="h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Write a comment..."
             />
+            {mentionQuery && mentionCandidates.length > 0 ? (
+              <div className="rounded-md border border-slate-200 bg-white p-2">
+                <p className="mb-1 text-[11px] text-slate-500">Mention candidates</p>
+                <div className="flex flex-wrap gap-1">
+                  {mentionCandidates.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => applyMention(candidate)}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      @{candidate.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <button type="button" onClick={postComment} disabled={saving} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
               Post comment
             </button>

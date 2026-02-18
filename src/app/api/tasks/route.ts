@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       status: "todo",
       sort_order: nextSort,
     })
-    .select("id, title, description, priority, status, assignee_id, column_id")
+    .select("id, title, description, priority, status, assignee_id, milestone_id, column_id")
     .single();
 
   if (error || !task) {

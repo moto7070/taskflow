@@ -27,6 +27,7 @@ interface TaskItem {
   priority: "low" | "medium" | "high" | "critical";
   status: "todo" | "in_progress" | "review" | "done";
   assignee_id: string | null;
+  milestone_id: string | null;
 }
 
 interface BoardColumn {
@@ -53,6 +54,13 @@ interface SubtaskItem {
 interface AssigneeCandidate {
   id: string;
   display_name: string | null;
+}
+
+interface MilestoneCandidate {
+  id: string;
+  name: string;
+  status: "planned" | "done";
+  due_date: string;
 }
 
 interface BoardDndProps {
@@ -126,6 +134,8 @@ function TaskDetailModal({
   const [status, setStatus] = useState<TaskItem["status"]>(task.status);
   const [assigneeId, setAssigneeId] = useState(task.assignee_id ?? "");
   const [assigneeCandidates, setAssigneeCandidates] = useState<AssigneeCandidate[]>([]);
+  const [milestoneId, setMilestoneId] = useState(task.milestone_id ?? "");
+  const [milestoneCandidates, setMilestoneCandidates] = useState<MilestoneCandidate[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentBody, setCommentBody] = useState("");
@@ -141,6 +151,7 @@ function TaskDetailModal({
     const json = (await res.json()) as {
       task?: TaskItem;
       assigneeCandidates?: AssigneeCandidate[];
+      milestoneCandidates?: MilestoneCandidate[];
       error?: string;
     };
 
@@ -155,7 +166,9 @@ function TaskDetailModal({
     setPriority(json.task.priority);
     setStatus(json.task.status);
     setAssigneeId(json.task.assignee_id ?? "");
+    setMilestoneId(json.task.milestone_id ?? "");
     setAssigneeCandidates(json.assigneeCandidates ?? []);
+    setMilestoneCandidates(json.milestoneCandidates ?? []);
     setLoadingDetails(false);
   }, [task.id]);
 
@@ -195,6 +208,7 @@ function TaskDetailModal({
           priority,
           status,
           assignee_id: assigneeId || null,
+          milestone_id: milestoneId || null,
         }),
       });
       const json = (await res.json()) as { task?: TaskItem; error?: string };
@@ -326,6 +340,19 @@ function TaskDetailModal({
               {assigneeCandidates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
                   {candidate.display_name ?? candidate.id}
+                </option>
+              ))}
+            </select>
+            <select
+              value={milestoneId}
+              onChange={(e) => setMilestoneId(e.target.value)}
+              className="min-w-52 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={loadingDetails}
+            >
+              <option value="">No milestone</option>
+              {milestoneCandidates.map((milestone) => (
+                <option key={milestone.id} value={milestone.id}>
+                  {milestone.name} ({milestone.status})
                 </option>
               ))}
             </select>
@@ -537,6 +564,7 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
                     priority: json.task!.priority,
                     status: json.task!.status,
                     assignee_id: json.task!.assignee_id ?? null,
+                    milestone_id: json.task!.milestone_id ?? null,
                   },
                 ],
               }

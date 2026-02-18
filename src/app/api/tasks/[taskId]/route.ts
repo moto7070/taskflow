@@ -8,6 +8,7 @@ interface UpdateTaskPayload {
   priority?: "low" | "medium" | "high" | "critical";
   status?: "todo" | "in_progress" | "review" | "done";
   assignee_id?: string | null;
+  milestone_id?: string | null;
 }
 
 async function canAccessTask(taskId: string, userId: string) {
@@ -57,7 +58,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 
   const { data: task, error } = await supabase
     .from("tasks")
-    .select("id, title, description, priority, status, assignee_id, column_id")
+    .select("id, title, description, priority, status, assignee_id, milestone_id, column_id")
     .eq("id", taskId)
     .single();
 
@@ -88,7 +89,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     display_name: profileMap.get(id) ?? null,
   }));
 
-  return NextResponse.json({ task, assigneeCandidates });
+  const { data: milestones, error: milestonesError } = await supabase
+    .from("milestones")
+    .select("id, name, status, due_date")
+    .eq("project_id", access.projectId)
+    .order("due_date", { ascending: true });
+
+  if (milestonesError) {
+    return NextResponse.json({ error: milestonesError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ task, assigneeCandidates, milestoneCandidates: milestones ?? [] });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -129,6 +140,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
       return NextResponse.json({ error: "Invalid assignee_id." }, { status: 400 });
     }
   }
+  if ("milestone_id" in payload) {
+    if (payload.milestone_id === null) {
+      updates.milestone_id = null;
+    } else if (typeof payload.milestone_id === "string" && payload.milestone_id.trim().length > 0) {
+      const { data: milestone } = await supabase
+        .from("milestones")
+        .select("id")
+        .eq("id", payload.milestone_id)
+        .eq("project_id", access.projectId)
+        .maybeSingle();
+
+      if (!milestone) {
+        return NextResponse.json({ error: "Milestone must belong to this project." }, { status: 400 });
+      }
+      updates.milestone_id = payload.milestone_id;
+    } else {
+      return NextResponse.json({ error: "Invalid milestone_id." }, { status: 400 });
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No updates" }, { status: 400 });
@@ -138,7 +168,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     .from("tasks")
     .update(updates)
     .eq("id", taskId)
-    .select("id, title, description, priority, status, assignee_id, column_id")
+    .select("id, title, description, priority, status, assignee_id, milestone_id, column_id")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,9 +1,23 @@
+import { AccessDenied } from "@/components/access-denied";
+import { canAccessProject, requireUserId } from "@/lib/rbac/guards";
+
 interface ProjectWikiPageProps {
   params: Promise<{ projectId: string }>;
 }
 
 export default async function ProjectWikiPage({ params }: ProjectWikiPageProps) {
   const { projectId } = await params;
+  const userId = await requireUserId();
+  const hasAccess = await canAccessProject(projectId, userId);
+
+  if (!hasAccess) {
+    return (
+      <AccessDenied
+        title="プロジェクトにアクセスできません"
+        description="このWikiはプロジェクト参加メンバーのみ閲覧できます。"
+      />
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8">

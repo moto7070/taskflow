@@ -36,7 +36,7 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
 
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("id, title, priority, status, column_id, sort_order")
+    .select("id, title, description, priority, status, column_id, sort_order")
     .eq("project_id", projectId)
     .order("sort_order", { ascending: true });
 
@@ -51,6 +51,7 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
           .map((task) => ({
             id: task.id,
             title: task.title,
+            description: task.description ?? null,
             priority: task.priority,
             status: task.status,
           })) ?? [],

@@ -18,10 +18,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { X } from "lucide-react";
 
 interface TaskItem {
   id: string;
   title: string;
+  description: string | null;
   priority: "low" | "medium" | "high" | "critical";
   status: "todo" | "in_progress" | "review" | "done";
 }
@@ -33,6 +35,13 @@ interface BoardColumn {
   tasks: TaskItem[];
 }
 
+interface CommentItem {
+  id: string;
+  body: string;
+  author_id: string;
+  created_at: string;
+}
+
 interface BoardDndProps {
   projectId: string;
   initialColumns: BoardColumn[];
@@ -42,7 +51,7 @@ function findColumnByTask(columns: BoardColumn[], taskId: string): BoardColumn |
   return columns.find((col) => col.tasks.some((task) => task.id === taskId));
 }
 
-function TaskCard({ task }: { task: TaskItem }) {
+function TaskCard({ task, onOpen }: { task: TaskItem; onOpen: (taskId: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task" },
@@ -58,19 +67,205 @@ function TaskCard({ task }: { task: TaskItem }) {
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="cursor-grab rounded-md border border-slate-200 bg-white p-3 text-sm shadow-sm"
+      className="rounded-md border border-slate-200 bg-white p-3 text-sm shadow-sm"
     >
-      <p className="font-medium text-slate-900">{task.title}</p>
-      <p className="mt-1 text-xs text-slate-500">
-        {task.priority} / {task.status}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <p className="font-medium text-slate-900">{task.title}</p>
+          <p className="mt-1 line-clamp-2 text-xs text-slate-500">{task.description || "No description"}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {task.priority} / {task.status}
+          </p>
+        </div>
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-500"
+          title="Drag"
+        >
+          ::
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={() => onOpen(task.id)}
+        className="mt-2 text-xs font-medium text-slate-700 underline"
+      >
+        Open details
+      </button>
     </div>
   );
 }
 
-function ColumnContainer({ column }: { column: BoardColumn }) {
+function TaskDetailModal({
+  task,
+  onClose,
+  onSaved,
+}: {
+  task: TaskItem;
+  onClose: () => void;
+  onSaved: (next: TaskItem) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [priority, setPriority] = useState<TaskItem["priority"]>(task.priority);
+  const [status, setStatus] = useState<TaskItem["status"]>(task.status);
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [saving, startSaving] = useTransition();
+
+  const fetchComments = async () => {
+    setLoadingComments(true);
+    const res = await fetch(`/api/tasks/${task.id}/comments`);
+    const json = (await res.json()) as { comments?: CommentItem[] };
+    setComments(json.comments ?? []);
+    setLoadingComments(false);
+  };
+
+  useState(() => {
+    void fetchComments();
+  });
+
+  const saveTask = () => {
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description: description || null,
+          priority,
+          status,
+        }),
+      });
+      const json = (await res.json()) as { task?: TaskItem; error?: string };
+      if (!res.ok || !json.task) {
+        window.alert(json.error ?? "Failed to save task.");
+        return;
+      }
+      onSaved(json.task);
+    });
+  };
+
+  const postComment = () => {
+    if (!commentBody.trim()) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: commentBody }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to post comment.");
+        return;
+      }
+      setCommentBody("");
+      await fetchComments();
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">Task details</h3>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 p-1">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Title"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Description"
+          />
+          <div className="flex gap-3">
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as TaskItem["priority"])}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="critical">critical</option>
+            </select>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as TaskItem["status"])}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="todo">todo</option>
+              <option value="in_progress">in_progress</option>
+              <option value="review">review</option>
+              <option value="done">done</option>
+            </select>
+            <button
+              type="button"
+              onClick={saveTask}
+              disabled={saving}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-slate-200 pt-4">
+          <h4 className="text-sm font-semibold text-slate-900">Comments</h4>
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              className="h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Write a comment..."
+            />
+            <button type="button" onClick={postComment} disabled={saving} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+              Post comment
+            </button>
+          </div>
+          <div className="mt-3 max-h-40 space-y-2 overflow-auto">
+            {loadingComments ? <p className="text-xs text-slate-500">Loading comments...</p> : null}
+            {comments.map((comment) => (
+              <div key={comment.id} className="rounded-md border border-slate-200 p-2 text-xs">
+                <p className="text-slate-800">{comment.body}</p>
+                <p className="mt-1 text-slate-500">
+                  {comment.author_id} / {new Date(comment.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))}
+            {!loadingComments && comments.length === 0 ? (
+              <p className="text-xs text-slate-500">No comments yet.</p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ColumnContainer({
+  column,
+  onOpenTask,
+  onCreateTask,
+}: {
+  column: BoardColumn;
+  onOpenTask: (taskId: string) => void;
+  onCreateTask: (columnId: string, title: string) => void;
+}) {
+  const [newTitle, setNewTitle] = useState("");
+
   return (
     <div className="w-72 flex-shrink-0 rounded-lg border border-slate-200 bg-slate-100 p-3">
       <div className="mb-3 flex items-center justify-between">
@@ -79,10 +274,29 @@ function ColumnContainer({ column }: { column: BoardColumn }) {
           {column.tasks.length}
         </span>
       </div>
+      <div className="mb-3 flex gap-2">
+        <input
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+          placeholder="New task title"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            if (!newTitle.trim()) return;
+            onCreateTask(column.id, newTitle.trim());
+            setNewTitle("");
+          }}
+          className="rounded border border-slate-300 px-2 py-1 text-xs"
+        >
+          Add
+        </button>
+      </div>
       <div className="space-y-2">
         <SortableContext items={column.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} onOpen={onOpenTask} />
           ))}
         </SortableContext>
       </div>
@@ -93,10 +307,14 @@ function ColumnContainer({ column }: { column: BoardColumn }) {
 export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
   const [columns, setColumns] = useState(initialColumns);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor));
 
-  const taskIds = useMemo(() => columns.flatMap((col) => col.tasks.map((task) => task.id)), [columns]);
+  const selectedTask = useMemo(
+    () => columns.flatMap((c) => c.tasks).find((task) => task.id === selectedTaskId) ?? null,
+    [columns, selectedTaskId],
+  );
 
   const persistOrder = (nextColumns: BoardColumn[]) => {
     startTransition(async () => {
@@ -120,6 +338,41 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
         };
         window.alert(data.error ?? "Failed to reorder tasks.");
       }
+    });
+  };
+
+  const createTask = (columnId: string, title: string) => {
+    startTransition(async () => {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, columnId, title }),
+      });
+      const json = (await res.json()) as { task?: TaskItem & { column_id: string }; error?: string };
+      if (!res.ok || !json.task) {
+        window.alert(json.error ?? "Failed to create task.");
+        return;
+      }
+
+      setColumns((prev) =>
+        prev.map((col) =>
+          col.id === columnId
+            ? {
+                ...col,
+                tasks: [
+                  ...col.tasks,
+                  {
+                    id: json.task!.id,
+                    title: json.task!.title,
+                    description: json.task!.description ?? null,
+                    priority: json.task!.priority,
+                    status: json.task!.status,
+                  },
+                ],
+              }
+            : col,
+        ),
+      );
     });
   };
 
@@ -165,9 +418,7 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
-          {taskIds.length === 0
-            ? "No tasks yet. Add tasks in the next step."
-            : "Drag and drop tasks to reorder or move between columns."}
+          Drag and drop tasks to reorder or move between columns.
         </p>
         {isPending ? <p className="text-xs text-slate-500">Saving...</p> : null}
       </div>
@@ -179,11 +430,31 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
       >
         <div className="flex gap-3 overflow-x-auto pb-2">
           {columns.map((column) => (
-            <ColumnContainer key={column.id} column={column} />
+            <ColumnContainer
+              key={column.id}
+              column={column}
+              onOpenTask={setSelectedTaskId}
+              onCreateTask={createTask}
+            />
           ))}
         </div>
       </DndContext>
       {activeTaskId ? <p className="text-xs text-slate-500">Dragging: {activeTaskId}</p> : null}
+
+      {selectedTask ? (
+        <TaskDetailModal
+          task={selectedTask}
+          onClose={() => setSelectedTaskId(null)}
+          onSaved={(next) => {
+            setColumns((prev) =>
+              prev.map((column) => ({
+                ...column,
+                tasks: column.tasks.map((task) => (task.id === next.id ? next : task)),
+              })),
+            );
+          }}
+        />
+      ) : null}
     </section>
   );
 }

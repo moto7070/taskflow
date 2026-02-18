@@ -40,6 +40,12 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
     .eq("project_id", projectId)
     .order("sort_order", { ascending: true });
 
+  const { data: milestones } = await supabase
+    .from("milestones")
+    .select("id, name, status, due_date, sort_order")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true });
+
   const boardColumns =
     columns?.map((column) => ({
       id: column.id,
@@ -67,7 +73,18 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
           <p className="mt-1 text-sm text-slate-600">projectId: {projectId}</p>
         </div>
 
-        <BoardDnd projectId={projectId} initialColumns={boardColumns} />
+        <BoardDnd
+          projectId={projectId}
+          initialColumns={boardColumns}
+          milestones={
+            milestones?.map((milestone) => ({
+              id: milestone.id,
+              name: milestone.name,
+              status: milestone.status,
+              due_date: milestone.due_date ?? "",
+            })) ?? []
+          }
+        />
       </div>
     </main>
   );

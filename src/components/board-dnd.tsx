@@ -43,6 +43,7 @@ import type {
 interface BoardDndProps {
   projectId: string;
   initialColumns: BoardColumn[];
+  milestones: MilestoneCandidate[];
 }
 
 const REACTION_OPTIONS = ["👍", "❤️", "🎉", "👀"] as const;
@@ -57,10 +58,19 @@ function findColumnByTask(columns: BoardColumn[], taskId: string): BoardColumn |
   return columns.find((col) => col.tasks.some((task) => task.id === taskId));
 }
 
-function TaskCard({ task, onOpen }: { task: TaskItem; onOpen: (taskId: string) => void }) {
+function TaskCard({
+  task,
+  onOpen,
+  draggable,
+}: {
+  task: TaskItem;
+  onOpen: (taskId: string) => void;
+  draggable: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task" },
+    disabled: !draggable,
   });
 
   const style = {
@@ -87,7 +97,8 @@ function TaskCard({ task, onOpen }: { task: TaskItem; onOpen: (taskId: string) =
           type="button"
           {...attributes}
           {...listeners}
-          className="cursor-grab rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-500"
+          disabled={!draggable}
+          className="cursor-grab rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
           title="Drag"
         >
           ::
@@ -823,10 +834,12 @@ function ColumnContainer({
   column,
   onOpenTask,
   onCreateTask,
+  canReorder,
 }: {
   column: BoardColumn;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (columnId: string, title: string) => void;
+  canReorder: boolean;
 }) {
   const [newTitle, setNewTitle] = useState("");
 
@@ -860,7 +873,7 @@ function ColumnContainer({
       <div className="space-y-2">
         <SortableContext items={column.tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onOpen={onOpenTask} />
+            <TaskCard key={task.id} task={task} onOpen={onOpenTask} draggable={canReorder} />
           ))}
         </SortableContext>
       </div>
@@ -868,12 +881,32 @@ function ColumnContainer({
   );
 }
 
-export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
+export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProps) {
   const [columns, setColumns] = useState(initialColumns);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [milestoneFilter, setMilestoneFilter] = useState<string>("__all");
   const [isPending, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor));
+  const canReorder = milestoneFilter === "__all";
+
+  const visibleColumns = useMemo(() => {
+    if (milestoneFilter === "__all") {
+      return columns;
+    }
+
+    if (milestoneFilter === "__none") {
+      return columns.map((column) => ({
+        ...column,
+        tasks: column.tasks.filter((task) => task.milestone_id === null),
+      }));
+    }
+
+    return columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((task) => task.milestone_id === milestoneFilter),
+    }));
+  }, [columns, milestoneFilter]);
 
   const selectedTask = useMemo(
     () => columns.flatMap((c) => c.tasks).find((task) => task.id === selectedTaskId) ?? null,
@@ -943,10 +976,12 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
   };
 
   const onDragStart = (event: DragStartEvent) => {
+    if (!canReorder) return;
     setActiveTaskId(String(event.active.id));
   };
 
   const onDragEnd = (event: DragEndEvent) => {
+    if (!canReorder) return;
     setActiveTaskId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -983,9 +1018,33 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
-          Drag and drop tasks to reorder or move between columns.
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-slate-500">
+            Drag and drop tasks to reorder or move between columns.
+          </p>
+          {!canReorder ? (
+            <p className="text-xs text-amber-600">Reordering is disabled while a milestone filter is active.</p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="milestone-filter" className="text-xs text-slate-600">
+            Milestone
+          </label>
+          <select
+            id="milestone-filter"
+            value={milestoneFilter}
+            onChange={(e) => setMilestoneFilter(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+          >
+            <option value="__all">All</option>
+            <option value="__none">No milestone</option>
+            {milestones.map((milestone) => (
+              <option key={milestone.id} value={milestone.id}>
+                {milestone.name} ({milestone.status})
+              </option>
+            ))}
+          </select>
+        </div>
         {isPending ? <p className="text-xs text-slate-500">Saving...</p> : null}
       </div>
       <DndContext
@@ -995,12 +1054,13 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
         onDragEnd={onDragEnd}
       >
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {columns.map((column) => (
+          {visibleColumns.map((column) => (
             <ColumnContainer
               key={column.id}
               column={column}
               onOpenTask={setSelectedTaskId}
               onCreateTask={createTask}
+              canReorder={canReorder}
             />
           ))}
         </div>

@@ -8,10 +8,41 @@ interface TeamSettingsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+interface AuditLogRow {
+  id: string;
+  actor_user_id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 function pickParam(value: string | string[] | undefined): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value[0] ?? "";
   return "";
+}
+
+function toStringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function actionLabel(action: string): string {
+  switch (action) {
+    case "team.member_invited":
+      return "Member invited";
+    case "team.member_role_updated":
+      return "Member role updated";
+    case "team.member_removed":
+      return "Member removed";
+    case "project.created":
+      return "Project created";
+    case "project.removed":
+      return "Project removed";
+    default:
+      return action;
+  }
 }
 
 export default async function TeamSettingsPage({ params, searchParams }: TeamSettingsPageProps) {
@@ -46,6 +77,22 @@ export default async function TeamSettingsPage({ params, searchParams }: TeamSet
     .select("id, email, role, token, expires_at, accepted_at")
     .eq("team_id", teamId)
     .order("created_at", { ascending: false });
+
+  const { data: auditLogRows } = await supabase
+    .from("audit_logs")
+    .select("id, actor_user_id, action, target_type, target_id, metadata, created_at")
+    .eq("team_id", teamId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  const logs = (auditLogRows ?? []) as AuditLogRow[];
+  const actorUserIds = Array.from(new Set(logs.map((log) => log.actor_user_id)));
+  let actorProfiles: Array<{ id: string; display_name: string | null }> = [];
+  if (actorUserIds.length > 0) {
+    const { data } = await supabase.from("profiles").select("id, display_name").in("id", actorUserIds);
+    actorProfiles = data ?? [];
+  }
+  const actorNameById = new Map((actorProfiles ?? []).map((profile) => [profile.id, profile.display_name]));
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-8">
@@ -166,6 +213,43 @@ export default async function TeamSettingsPage({ params, searchParams }: TeamSet
               ))
             ) : (
               <p className="text-sm text-slate-500">No invitations.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Audit Logs</h2>
+          <p className="mt-1 text-xs text-slate-500">Latest 100 events (admin only)</p>
+          <div className="mt-4 space-y-3">
+            {logs.length ? (
+              logs.map((log) => {
+                const metadata = log.metadata ?? {};
+                const actorName = actorNameById.get(log.actor_user_id) || log.actor_user_id.slice(0, 8);
+                const invitedEmail = toStringOrEmpty(metadata.invited_email);
+                const role = toStringOrEmpty(metadata.role);
+                const projectName = toStringOrEmpty(metadata.name);
+
+                return (
+                  <div key={log.id} className="rounded-md border border-slate-200 p-3 text-sm">
+                    <p className="font-medium text-slate-900">{actionLabel(log.action)}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      actor: {actorName} ({log.actor_user_id})
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      target: {log.target_type}
+                      {log.target_id ? ` (${log.target_id})` : ""}
+                    </p>
+                    {invitedEmail ? <p className="mt-1 text-xs text-slate-500">email: {invitedEmail}</p> : null}
+                    {role ? <p className="mt-1 text-xs text-slate-500">role: {role}</p> : null}
+                    {projectName ? <p className="mt-1 text-xs text-slate-500">project: {projectName}</p> : null}
+                    <p className="mt-1 text-xs text-slate-500">
+                      at: {new Date(log.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-500">No audit logs yet.</p>
             )}
           </div>
         </section>

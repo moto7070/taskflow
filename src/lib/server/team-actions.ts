@@ -89,22 +89,24 @@ export async function createProjectAction(formData: FormData) {
     redirect(withQuery("/app", { error: "Only team admins can create projects." }));
   }
 
-  const { data: project, error: projectError } = await supabase
+  const admin = createAdminClient();
+  const projectId = crypto.randomUUID();
+
+  const { error: projectError } = await admin
     .from("projects")
     .insert({
+      id: projectId,
       team_id: teamId,
       name: projectName,
       created_by: user.id,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (projectError || !project) {
+  if (projectError) {
     redirect(withQuery("/app", { error: toPublicErrorMessage(projectError, "Failed to create project.") }));
   }
 
-  const { error: pmError } = await supabase.from("project_members").insert({
-    project_id: project.id,
+  const { error: pmError } = await admin.from("project_members").insert({
+    project_id: projectId,
     user_id: user.id,
     role: "admin",
   });
@@ -118,8 +120,8 @@ export async function createProjectAction(formData: FormData) {
     actorUserId: user.id,
     action: "project.created",
     targetType: "project",
-    targetId: project.id,
-    projectId: project.id,
+    targetId: projectId,
+    projectId,
     metadata: {
       name: projectName,
     },

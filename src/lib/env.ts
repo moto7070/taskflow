@@ -9,9 +9,20 @@ function getEnv(name: ClientVarName): string {
 }
 
 export function getSupabaseConfig() {
+  const anonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  // Guard against accidental secret-key exposure through NEXT_PUBLIC variables.
+  if (anonKey.startsWith("sb_secret_") || anonKey.toLowerCase().includes("service_role")) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY appears to be a secret key. Use a Supabase publishable/anon key.",
+    );
+  }
+  if (process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY must never be defined.");
+  }
+
   return {
     url: getEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    anonKey: getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    anonKey,
   };
 }
 

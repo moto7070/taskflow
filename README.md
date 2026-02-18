@@ -26,6 +26,12 @@ npm run typecheck
 npm run test
 ```
 
+## Environment Variables
+
+- See `.env.local.example` for local setup.
+- For production deployment, follow `docs/deploy/vercel-env-checklist.md`.
+- Important: never expose secret keys as `NEXT_PUBLIC_*`.
+
 ## Contribution Workflow
 
 - Branch from `main` using `feature/*`, `fix/*`, or `chore/*`.

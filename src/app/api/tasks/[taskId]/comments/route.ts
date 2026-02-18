@@ -7,6 +7,24 @@ interface CreateCommentPayload {
   parent_comment_id?: string | null;
 }
 
+interface ReactionSummaryItem {
+  emoji: string;
+  count: number;
+  reacted_by_me: boolean;
+}
+
+interface CommentRow {
+  id: string;
+  body: string;
+  author_id: string;
+  parent_comment_id: string | null;
+  created_at: string;
+}
+
+interface EnrichedCommentRow extends CommentRow {
+  reaction_summary: ReactionSummaryItem[];
+}
+
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
   const { data: task } = await supabase
@@ -60,17 +78,48 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const topLevel = (comments ?? []).filter((comment) => comment.parent_comment_id === null);
-  const byParent = new Map<string, typeof comments>();
-  for (const comment of comments ?? []) {
+  const commentRows = (comments ?? []) as CommentRow[];
+  const commentIds = commentRows.map((comment) => comment.id);
+  const { data: reactions, error: reactionsError } =
+    commentIds.length > 0
+      ? await supabase
+          .from("comment_reactions")
+          .select("comment_id, emoji, user_id")
+          .in("comment_id", commentIds)
+      : { data: [], error: null };
+
+  if (reactionsError) return NextResponse.json({ error: reactionsError.message }, { status: 500 });
+
+  const reactionMap = new Map<string, Map<string, ReactionSummaryItem>>();
+  for (const reaction of reactions ?? []) {
+    const emojiMap = reactionMap.get(reaction.comment_id) ?? new Map<string, ReactionSummaryItem>();
+    const existing = emojiMap.get(reaction.emoji) ?? {
+      emoji: reaction.emoji,
+      count: 0,
+      reacted_by_me: false,
+    };
+    existing.count += 1;
+    if (reaction.user_id === user.id) existing.reacted_by_me = true;
+    emojiMap.set(reaction.emoji, existing);
+    reactionMap.set(reaction.comment_id, emojiMap);
+  }
+
+  const withReactions = (comment: CommentRow): EnrichedCommentRow => ({
+    ...comment,
+    reaction_summary: Array.from((reactionMap.get(comment.id) ?? new Map()).values()),
+  });
+
+  const topLevel = commentRows.filter((comment) => comment.parent_comment_id === null);
+  const byParent = new Map<string, EnrichedCommentRow[]>();
+  for (const comment of commentRows) {
     if (!comment.parent_comment_id) continue;
     const list = byParent.get(comment.parent_comment_id) ?? [];
-    list.push(comment);
+    list.push(withReactions(comment));
     byParent.set(comment.parent_comment_id, list);
   }
 
   const result = topLevel.map((comment) => ({
-    ...comment,
+    ...withReactions(comment),
     replies: byParent.get(comment.id) ?? [],
   }));
 

@@ -43,6 +43,11 @@ interface CommentItem {
   author_id: string;
   parent_comment_id: string | null;
   created_at: string;
+  reaction_summary?: Array<{
+    emoji: string;
+    count: number;
+    reacted_by_me: boolean;
+  }>;
   replies?: CommentItem[];
 }
 
@@ -69,6 +74,8 @@ interface BoardDndProps {
   projectId: string;
   initialColumns: BoardColumn[];
 }
+
+const REACTION_OPTIONS = ["👍", "❤️", "🎉", "👀"] as const;
 
 function findColumnByTask(columns: BoardColumn[], taskId: string): BoardColumn | undefined {
   return columns.find((col) => col.tasks.some((task) => task.id === taskId));
@@ -274,6 +281,22 @@ function TaskDetailModal({
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
         window.alert(json.error ?? "Failed to edit comment.");
+        return;
+      }
+      await fetchComments();
+    });
+  };
+
+  const toggleReaction = (commentId: string, emoji: string) => {
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/comments/${commentId}/reactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emoji }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to update reaction.");
         return;
       }
       await fetchComments();
@@ -517,6 +540,26 @@ function TaskDetailModal({
                 ) : null}
 
                 <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  <div className="flex flex-wrap gap-1">
+                    {REACTION_OPTIONS.map((emoji) => {
+                      const current = (comment.reaction_summary ?? []).find((item) => item.emoji === emoji);
+                      return (
+                        <button
+                          key={`${comment.id}-${emoji}`}
+                          type="button"
+                          onClick={() => toggleReaction(comment.id, emoji)}
+                          className={`rounded border px-2 py-1 text-xs ${
+                            current?.reacted_by_me
+                              ? "border-slate-600 bg-slate-200 text-slate-900"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          {emoji} {current?.count ?? 0}
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {(comment.replies ?? []).map((reply) => (
                     <div key={reply.id} className="rounded border border-slate-200 bg-slate-50 p-2">
                       <p className="text-slate-800">{reply.body}</p>
@@ -541,6 +584,26 @@ function TaskDetailModal({
                           </button>
                         </div>
                       ) : null}
+
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {REACTION_OPTIONS.map((emoji) => {
+                          const current = (reply.reaction_summary ?? []).find((item) => item.emoji === emoji);
+                          return (
+                            <button
+                              key={`${reply.id}-${emoji}`}
+                              type="button"
+                              onClick={() => toggleReaction(reply.id, emoji)}
+                              className={`rounded border px-2 py-1 text-xs ${
+                                current?.reacted_by_me
+                                  ? "border-slate-600 bg-slate-200 text-slate-900"
+                                  : "border-slate-300 bg-white text-slate-700"
+                              }`}
+                            >
+                              {emoji} {current?.count ?? 0}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
 

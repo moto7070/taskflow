@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getCommentAttachmentsBucket } from "@/lib/env";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 interface CreateCommentPayload {
@@ -23,6 +25,14 @@ interface CommentRow {
 
 interface EnrichedCommentRow extends CommentRow {
   reaction_summary: ReactionSummaryItem[];
+  attachments: Array<{
+    id: string;
+    file_name: string;
+    mime_type: string;
+    file_size: number;
+    storage_path: string;
+    signed_url: string | null;
+  }>;
 }
 
 async function canAccessTask(taskId: string, userId: string) {
@@ -104,9 +114,45 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     reactionMap.set(reaction.comment_id, emojiMap);
   }
 
+  const { data: attachments, error: attachmentsError } =
+    commentIds.length > 0
+      ? await supabase
+          .from("comment_attachments")
+          .select("id, comment_id, file_name, mime_type, file_size, storage_path")
+          .in("comment_id", commentIds)
+      : { data: [], error: null };
+  if (attachmentsError) return NextResponse.json({ error: attachmentsError.message }, { status: 500 });
+
+  const admin = createAdminClient();
+  const bucket = getCommentAttachmentsBucket();
+  const attachmentRows = await Promise.all(
+    (attachments ?? []).map(async (attachment) => {
+      const { data } = await admin.storage.from(bucket).createSignedUrl(attachment.storage_path, 60 * 60);
+      return {
+        ...attachment,
+        signed_url: data?.signedUrl ?? null,
+      };
+    }),
+  );
+
+  const attachmentMap = new Map<string, EnrichedCommentRow["attachments"]>();
+  for (const attachment of attachmentRows) {
+    const list = attachmentMap.get(attachment.comment_id) ?? [];
+    list.push({
+      id: attachment.id,
+      file_name: attachment.file_name,
+      mime_type: attachment.mime_type,
+      file_size: attachment.file_size,
+      storage_path: attachment.storage_path,
+      signed_url: attachment.signed_url,
+    });
+    attachmentMap.set(attachment.comment_id, list);
+  }
+
   const withReactions = (comment: CommentRow): EnrichedCommentRow => ({
     ...comment,
     reaction_summary: Array.from((reactionMap.get(comment.id) ?? new Map()).values()),
+    attachments: attachmentMap.get(comment.id) ?? [],
   });
 
   const topLevel = commentRows.filter((comment) => comment.parent_comment_id === null);

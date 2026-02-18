@@ -48,6 +48,13 @@ interface CommentItem {
     count: number;
     reacted_by_me: boolean;
   }>;
+  attachments?: Array<{
+    id: string;
+    file_name: string;
+    mime_type: string;
+    file_size: number;
+    signed_url: string | null;
+  }>;
   replies?: CommentItem[];
 }
 
@@ -82,6 +89,12 @@ interface BoardDndProps {
 }
 
 const REACTION_OPTIONS = ["👍", "❤️", "🎉", "👀"] as const;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function findColumnByTask(columns: BoardColumn[], taskId: string): BoardColumn | undefined {
   return columns.find((col) => col.tasks.some((task) => task.id === taskId));
@@ -155,9 +168,11 @@ function TaskDetailModal({
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
+  const [commentAttachmentFile, setCommentAttachmentFile] = useState<File | null>(null);
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
+  const [attachmentFiles, setAttachmentFiles] = useState<Record<string, File | null>>({});
   const [loadingComments, setLoadingComments] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -248,14 +263,66 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: commentBody }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as { comment?: CommentItem; error?: string };
       if (!res.ok) {
         window.alert(json.error ?? "Failed to post comment.");
         return;
       }
+      if (!json.comment) {
+        window.alert("Failed to parse created comment.");
+        return;
+      }
+
+      if (commentAttachmentFile) {
+        await uploadAttachment(json.comment.id, commentAttachmentFile);
+        setCommentAttachmentFile(null);
+      }
       setCommentBody("");
       setMentionQuery(null);
       setMentionCandidates([]);
+      await fetchComments();
+    });
+  };
+
+  const uploadAttachment = async (commentId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/tasks/${task.id}/comments/${commentId}/attachments`, {
+      method: "POST",
+      body: formData,
+    });
+    const json = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      window.alert(json.error ?? "Failed to upload attachment.");
+      return false;
+    }
+    return true;
+  };
+
+  const uploadExistingAttachment = (commentId: string) => {
+    const file = attachmentFiles[commentId];
+    if (!file) return;
+    startSaving(async () => {
+      const ok = await uploadAttachment(commentId, file);
+      if (!ok) return;
+      setAttachmentFiles((prev) => ({ ...prev, [commentId]: null }));
+      await fetchComments();
+    });
+  };
+
+  const deleteAttachment = (commentId: string, attachmentId: string) => {
+    startSaving(async () => {
+      const res = await fetch(
+        `/api/tasks/${task.id}/comments/${commentId}/attachments/${attachmentId}`,
+        {
+          method: "DELETE",
+        },
+      );
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to delete attachment.");
+        return;
+      }
       await fetchComments();
     });
   };
@@ -547,6 +614,11 @@ function TaskDetailModal({
               className="h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               placeholder="Write a comment..."
             />
+            <input
+              type="file"
+              onChange={(e) => setCommentAttachmentFile(e.target.files?.[0] ?? null)}
+              className="text-xs"
+            />
             {mentionQuery && mentionCandidates.length > 0 ? (
               <div className="rounded-md border border-slate-200 bg-white p-2">
                 <p className="mb-1 text-[11px] text-slate-500">Mention candidates</p>
@@ -596,6 +668,54 @@ function TaskDetailModal({
                 ) : null}
 
                 <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  {(comment.attachments ?? []).length > 0 ? (
+                    <div className="space-y-1 rounded border border-slate-200 bg-slate-50 p-2">
+                      {(comment.attachments ?? []).map((attachment) => (
+                        <div key={attachment.id} className="flex items-center justify-between gap-2">
+                          <a
+                            href={attachment.signed_url ?? "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="truncate underline"
+                          >
+                            {attachment.file_name} ({formatBytes(attachment.file_size)})
+                          </a>
+                          {currentUserId === comment.author_id ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteAttachment(comment.id, attachment.id)}
+                              className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {currentUserId === comment.author_id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        onChange={(e) =>
+                          setAttachmentFiles((prev) => ({
+                            ...prev,
+                            [comment.id]: e.target.files?.[0] ?? null,
+                          }))
+                        }
+                        className="text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => uploadExistingAttachment(comment.id)}
+                        disabled={saving || !attachmentFiles[comment.id]}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs"
+                      >
+                        Upload
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="flex flex-wrap gap-1">
                     {REACTION_OPTIONS.map((emoji) => {
                       const current = (comment.reaction_summary ?? []).find((item) => item.emoji === emoji);
@@ -637,6 +757,54 @@ function TaskDetailModal({
                             className="rounded border border-slate-300 px-2 py-1 text-xs"
                           >
                             Delete
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {(reply.attachments ?? []).length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {(reply.attachments ?? []).map((attachment) => (
+                            <div key={attachment.id} className="flex items-center justify-between gap-2">
+                              <a
+                                href={attachment.signed_url ?? "#"}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="truncate underline"
+                              >
+                                {attachment.file_name} ({formatBytes(attachment.file_size)})
+                              </a>
+                              {currentUserId === reply.author_id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAttachment(reply.id, attachment.id)}
+                                  className="rounded border border-slate-300 px-2 py-1 text-xs"
+                                >
+                                  Remove
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {currentUserId === reply.author_id ? (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="file"
+                            onChange={(e) =>
+                              setAttachmentFiles((prev) => ({
+                                ...prev,
+                                [reply.id]: e.target.files?.[0] ?? null,
+                              }))
+                            }
+                            className="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => uploadExistingAttachment(reply.id)}
+                            disabled={saving || !attachmentFiles[reply.id]}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            Upload
                           </button>
                         </div>
                       ) : null}

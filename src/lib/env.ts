@@ -32,3 +32,34 @@ export function getSupabaseServiceRoleConfig() {
 export function getCommentAttachmentsBucket() {
   return process.env.SUPABASE_COMMENT_ATTACHMENTS_BUCKET || "comment-attachments";
 }
+
+export function getCommentAttachmentMaxBytes() {
+  const raw = process.env.COMMENT_ATTACHMENT_MAX_BYTES;
+  if (!raw) return 10 * 1024 * 1024;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("COMMENT_ATTACHMENT_MAX_BYTES must be a positive integer.");
+  }
+  return parsed;
+}
+
+export function getCommentAttachmentAllowedMimeTypes() {
+  const raw = process.env.COMMENT_ATTACHMENT_ALLOWED_MIME_TYPES;
+  if (!raw) {
+    return new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "application/zip",
+    ]);
+  }
+
+  return new Set(
+    raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+}

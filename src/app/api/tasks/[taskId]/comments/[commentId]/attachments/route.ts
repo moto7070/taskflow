@@ -1,7 +1,11 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 
-import { getCommentAttachmentsBucket } from "@/lib/env";
+import {
+  getCommentAttachmentAllowedMimeTypes,
+  getCommentAttachmentMaxBytes,
+  getCommentAttachmentsBucket,
+} from "@/lib/env";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
@@ -115,13 +119,30 @@ export async function POST(
     return NextResponse.json({ error: "file is required." }, { status: 400 });
   }
 
+  const maxBytes = getCommentAttachmentMaxBytes();
+  if (file.size > maxBytes) {
+    return NextResponse.json(
+      { error: `File size exceeds limit (${maxBytes} bytes).` },
+      { status: 400 },
+    );
+  }
+
+  const allowedMimeTypes = getCommentAttachmentAllowedMimeTypes();
+  const mimeType = file.type || "application/octet-stream";
+  if (!allowedMimeTypes.has(mimeType)) {
+    return NextResponse.json(
+      { error: `Unsupported file type: ${mimeType}` },
+      { status: 400 },
+    );
+  }
+
   const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${taskId}/${commentId}/${randomUUID()}-${safeFileName}`;
   const bucket = getCommentAttachmentsBucket();
   const admin = createAdminClient();
 
   const { error: uploadError } = await admin.storage.from(bucket).upload(storagePath, file, {
-    contentType: file.type || "application/octet-stream",
+    contentType: mimeType,
     upsert: false,
   });
   if (uploadError) {
@@ -134,7 +155,7 @@ export async function POST(
       comment_id: commentId,
       storage_path: storagePath,
       file_name: file.name,
-      mime_type: file.type || "application/octet-stream",
+      mime_type: mimeType,
       file_size: file.size,
     })
     .select("id, file_name, mime_type, file_size, storage_path")

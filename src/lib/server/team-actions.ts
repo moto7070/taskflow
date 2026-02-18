@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { getAppUrl } from "@/lib/app-url";
+import { sendInviteMail } from "@/lib/server/invite-email";
 import { createClient } from "@/utils/supabase/server";
 
 function withQuery(path: string, params: Record<string, string>): string {
@@ -128,11 +130,12 @@ export async function inviteMemberAction(formData: FormData) {
 
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+  const normalizedRole = role === "admin" ? "admin" : "user";
 
   const { error } = await supabase.from("invitations").insert({
     team_id: teamId,
     email,
-    role: role === "admin" ? "admin" : "user",
+    role: normalizedRole,
     token,
     expires_at: expiresAt,
     created_by: user.id,
@@ -142,7 +145,27 @@ export async function inviteMemberAction(formData: FormData) {
     redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
   }
 
-  redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Invitation created." }));
+  const inviteUrl = `${getAppUrl()}/invite/${token}`;
+  const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
+  const teamName = team?.name ?? "your team";
+
+  const emailResult = await sendInviteMail({
+    to: email,
+    inviteUrl,
+    teamName,
+    role: normalizedRole,
+    invitedByEmail: user.email ?? "team admin",
+  });
+
+  if (!emailResult.sent) {
+    redirect(
+      withQuery(`/app/team/${teamId}/settings`, {
+        message: "Invitation created, but invite email was not sent. Share the link from Invitations list.",
+      }),
+    );
+  }
+
+  redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Invitation created and email sent." }));
 }
 
 export async function updateMemberRoleAction(formData: FormData) {

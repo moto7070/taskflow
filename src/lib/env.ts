@@ -63,3 +63,25 @@ export function getCommentAttachmentAllowedMimeTypes() {
       .filter(Boolean),
   );
 }
+
+export interface InviteEmailConfig {
+  apiKey: string;
+  from: string;
+  replyTo?: string;
+}
+
+export function getInviteEmailConfig(): InviteEmailConfig | null {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.INVITE_EMAIL_FROM;
+  const replyTo = process.env.INVITE_EMAIL_REPLY_TO;
+
+  if (!apiKey || !from) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    from,
+    replyTo,
+  };
+}

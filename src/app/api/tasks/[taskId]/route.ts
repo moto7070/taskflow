@@ -7,6 +7,7 @@ interface UpdateTaskPayload {
   description?: string | null;
   priority?: "low" | "medium" | "high" | "critical";
   status?: "todo" | "in_progress" | "review" | "done";
+  assignee_id?: string | null;
 }
 
 async function canAccessTask(taskId: string, userId: string) {
@@ -61,7 +62,33 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ task });
+
+  const { data: projectMembers, error: projectMembersError } = await supabase
+    .from("project_members")
+    .select("user_id")
+    .eq("project_id", access.projectId);
+
+  if (projectMembersError) {
+    return NextResponse.json({ error: projectMembersError.message }, { status: 500 });
+  }
+
+  const candidateIds = Array.from(new Set((projectMembers ?? []).map((member) => member.user_id)));
+  const { data: profiles, error: profilesError } =
+    candidateIds.length > 0
+      ? await supabase.from("profiles").select("id, display_name").in("id", candidateIds)
+      : { data: [], error: null };
+
+  if (profilesError) {
+    return NextResponse.json({ error: profilesError.message }, { status: 500 });
+  }
+
+  const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile.display_name]));
+  const assigneeCandidates = candidateIds.map((id) => ({
+    id,
+    display_name: profileMap.get(id) ?? null,
+  }));
+
+  return NextResponse.json({ task, assigneeCandidates });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -83,6 +110,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
   }
   if (payload.priority) updates.priority = payload.priority;
   if (payload.status) updates.status = payload.status;
+  if ("assignee_id" in payload) {
+    if (payload.assignee_id === null) {
+      updates.assignee_id = null;
+    } else if (typeof payload.assignee_id === "string" && payload.assignee_id.trim().length > 0) {
+      const { data: assigneeMember } = await supabase
+        .from("project_members")
+        .select("id")
+        .eq("project_id", access.projectId)
+        .eq("user_id", payload.assignee_id)
+        .maybeSingle();
+
+      if (!assigneeMember) {
+        return NextResponse.json({ error: "Assignee must be a project member." }, { status: 400 });
+      }
+      updates.assignee_id = payload.assignee_id;
+    } else {
+      return NextResponse.json({ error: "Invalid assignee_id." }, { status: 400 });
+    }
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No updates" }, { status: 400 });

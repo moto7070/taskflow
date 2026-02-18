@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
   DndContext,
@@ -26,6 +26,7 @@ interface TaskItem {
   description: string | null;
   priority: "low" | "medium" | "high" | "critical";
   status: "todo" | "in_progress" | "review" | "done";
+  assignee_id: string | null;
 }
 
 interface BoardColumn {
@@ -40,6 +41,11 @@ interface CommentItem {
   body: string;
   author_id: string;
   created_at: string;
+}
+
+interface AssigneeCandidate {
+  id: string;
+  display_name: string | null;
 }
 
 interface BoardDndProps {
@@ -111,22 +117,53 @@ function TaskDetailModal({
   const [description, setDescription] = useState(task.description ?? "");
   const [priority, setPriority] = useState<TaskItem["priority"]>(task.priority);
   const [status, setStatus] = useState<TaskItem["status"]>(task.status);
+  const [assigneeId, setAssigneeId] = useState(task.assignee_id ?? "");
+  const [assigneeCandidates, setAssigneeCandidates] = useState<AssigneeCandidate[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentBody, setCommentBody] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [saving, startSaving] = useTransition();
 
-  const fetchComments = async () => {
+  const fetchTaskDetails = useCallback(async () => {
+    setLoadingDetails(true);
+    const res = await fetch(`/api/tasks/${task.id}`);
+    const json = (await res.json()) as {
+      task?: TaskItem;
+      assigneeCandidates?: AssigneeCandidate[];
+      error?: string;
+    };
+
+    if (!res.ok || !json.task) {
+      window.alert(json.error ?? "Failed to load task details.");
+      setLoadingDetails(false);
+      return;
+    }
+
+    setTitle(json.task.title);
+    setDescription(json.task.description ?? "");
+    setPriority(json.task.priority);
+    setStatus(json.task.status);
+    setAssigneeId(json.task.assignee_id ?? "");
+    setAssigneeCandidates(json.assigneeCandidates ?? []);
+    setLoadingDetails(false);
+  }, [task.id]);
+
+  const fetchComments = useCallback(async () => {
     setLoadingComments(true);
     const res = await fetch(`/api/tasks/${task.id}/comments`);
     const json = (await res.json()) as { comments?: CommentItem[] };
     setComments(json.comments ?? []);
     setLoadingComments(false);
-  };
+  }, [task.id]);
 
-  useState(() => {
-    void fetchComments();
-  });
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchTaskDetails();
+      void fetchComments();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchComments, fetchTaskDetails]);
 
   const saveTask = () => {
     startSaving(async () => {
@@ -138,6 +175,7 @@ function TaskDetailModal({
           description: description || null,
           priority,
           status,
+          assignee_id: assigneeId || null,
         }),
       });
       const json = (await res.json()) as { task?: TaskItem; error?: string };
@@ -210,6 +248,19 @@ function TaskDetailModal({
               <option value="in_progress">in_progress</option>
               <option value="review">review</option>
               <option value="done">done</option>
+            </select>
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              className="min-w-44 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={loadingDetails}
+            >
+              <option value="">Unassigned</option>
+              {assigneeCandidates.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.display_name ?? candidate.id}
+                </option>
+              ))}
             </select>
             <button
               type="button"
@@ -367,6 +418,7 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
                     description: json.task!.description ?? null,
                     priority: json.task!.priority,
                     status: json.task!.status,
+                    assignee_id: json.task!.assignee_id ?? null,
                   },
                 ],
               }
@@ -443,6 +495,7 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
 
       {selectedTask ? (
         <TaskDetailModal
+          key={selectedTask.id}
           task={selectedTask}
           onClose={() => setSelectedTaskId(null)}
           onSaved={(next) => {

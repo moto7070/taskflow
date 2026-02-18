@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getCommentAttachmentsBucket } from "@/lib/env";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 interface UpdateCommentPayload {
@@ -106,7 +108,57 @@ export async function DELETE(
     return NextResponse.json({ error: "Only the author can delete this comment." }, { status: 403 });
   }
 
+  const { data: allComments, error: allCommentsError } = await supabase
+    .from("task_comments")
+    .select("id, parent_comment_id")
+    .eq("task_id", taskId);
+  if (allCommentsError) return NextResponse.json({ error: allCommentsError.message }, { status: 500 });
+
+  const childrenMap = new Map<string, string[]>();
+  for (const row of allComments ?? []) {
+    if (!row.parent_comment_id) continue;
+    const list = childrenMap.get(row.parent_comment_id) ?? [];
+    list.push(row.id);
+    childrenMap.set(row.parent_comment_id, list);
+  }
+
+  const targetCommentIds: string[] = [];
+  const queue = [commentId];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    targetCommentIds.push(current);
+    const children = childrenMap.get(current) ?? [];
+    queue.push(...children);
+  }
+
+  const { data: attachments, error: attachmentsError } = await supabase
+    .from("comment_attachments")
+    .select("storage_path")
+    .in("comment_id", targetCommentIds);
+  if (attachmentsError) return NextResponse.json({ error: attachmentsError.message }, { status: 500 });
+
   const { error } = await supabase.from("task_comments").delete().eq("id", commentId).eq("task_id", taskId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const storagePaths = Array.from(
+    new Set((attachments ?? []).map((attachment) => attachment.storage_path).filter(Boolean)),
+  );
+  if (storagePaths.length === 0) return NextResponse.json({ ok: true });
+
+  const admin = createAdminClient();
+  const bucket = getCommentAttachmentsBucket();
+  const { error: removeError } = await admin.storage.from(bucket).remove(storagePaths);
+  if (removeError) {
+    return NextResponse.json(
+      {
+        ok: true,
+        warning: "Comment deleted but attachment cleanup failed.",
+        detail: removeError.message,
+      },
+      { status: 200 },
+    );
+  }
+
   return NextResponse.json({ ok: true });
 }

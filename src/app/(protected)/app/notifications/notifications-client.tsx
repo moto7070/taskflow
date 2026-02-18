@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
+import type {
+  ApiErrorResponse,
+  NotificationUpdateResponse,
+  NotificationsGetResponse,
+} from "@/lib/types/api";
 import type { NotificationItem } from "@/lib/types/domain";
 
 export function NotificationsClient() {
@@ -12,8 +17,8 @@ export function NotificationsClient() {
   const fetchItems = async () => {
     setLoading(true);
     const res = await fetch("/api/notifications?limit=100");
-    const json = (await res.json()) as { notifications?: NotificationItem[] };
-    setItems(json.notifications ?? []);
+    const json = (await res.json()) as NotificationsGetResponse | ApiErrorResponse;
+    setItems("notifications" in json ? json.notifications : []);
     setLoading(false);
   };
 
@@ -31,9 +36,9 @@ export function NotificationsClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_read: isRead }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as NotificationUpdateResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to update notification.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to update notification.");
         return;
       }
       await fetchItems();
@@ -43,7 +48,7 @@ export function NotificationsClient() {
   const markAllRead = () => {
     startTransition(async () => {
       const res = await fetch("/api/notifications/read-all", { method: "POST" });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiErrorResponse;
       if (!res.ok) {
         window.alert(json.error ?? "Failed to mark all notifications read.");
         return;

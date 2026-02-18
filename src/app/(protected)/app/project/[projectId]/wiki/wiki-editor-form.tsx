@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import type { ApiErrorResponse, WikiUpsertResponse } from "@/lib/types/api";
 
 interface WikiEditorFormProps {
   projectId: string;
@@ -35,9 +36,9 @@ export function WikiEditorForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, body }),
       });
-      const json = (await res.json()) as { page?: { id: string }; error?: string };
-      if (!res.ok || !json.page) {
-        window.alert(json.error ?? "Failed to save wiki page.");
+      const json = (await res.json()) as WikiUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("page" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to save wiki page.");
         return;
       }
       router.push(`/app/project/${projectId}/wiki/${json.page.id}`);
@@ -53,7 +54,7 @@ export function WikiEditorForm({
       const res = await fetch(`/api/projects/${projectId}/wiki/${pageId}`, {
         method: "DELETE",
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiErrorResponse;
       if (!res.ok) {
         window.alert(json.error ?? "Failed to delete wiki page.");
         return;

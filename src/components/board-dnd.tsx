@@ -20,6 +20,17 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
 import type {
+  ApiErrorResponse,
+  ApiOkResponse,
+  CommentCreateResponse,
+  CommentsGetResponse,
+  MentionsGetResponse,
+  SubtasksGetResponse,
+  TaskCreateResponse,
+  TaskDetailResponse,
+  TaskUpdateResponse,
+} from "@/lib/types/api";
+import type {
   AssigneeCandidate,
   BoardColumn,
   CommentItem,
@@ -128,15 +139,10 @@ function TaskDetailModal({
   const fetchTaskDetails = useCallback(async () => {
     setLoadingDetails(true);
     const res = await fetch(`/api/tasks/${task.id}`);
-    const json = (await res.json()) as {
-      task?: TaskItem;
-      assigneeCandidates?: AssigneeCandidate[];
-      milestoneCandidates?: MilestoneCandidate[];
-      error?: string;
-    };
+    const json = (await res.json()) as TaskDetailResponse | ApiErrorResponse;
 
-    if (!res.ok || !json.task) {
-      window.alert(json.error ?? "Failed to load task details.");
+    if (!res.ok || !("task" in json)) {
+      window.alert(("error" in json ? json.error : undefined) ?? "Failed to load task details.");
       setLoadingDetails(false);
       return;
     }
@@ -155,17 +161,23 @@ function TaskDetailModal({
   const fetchComments = useCallback(async () => {
     setLoadingComments(true);
     const res = await fetch(`/api/tasks/${task.id}/comments`);
-    const json = (await res.json()) as { comments?: CommentItem[]; currentUserId?: string };
-    setComments(json.comments ?? []);
-    setCurrentUserId(json.currentUserId ?? null);
+    const json = (await res.json()) as CommentsGetResponse | ApiErrorResponse;
+    if (!res.ok || !("comments" in json)) {
+      setComments([]);
+      setCurrentUserId(null);
+      setLoadingComments(false);
+      return;
+    }
+    setComments(json.comments);
+    setCurrentUserId(json.currentUserId);
     setLoadingComments(false);
   }, [task.id]);
 
   const fetchSubtasks = useCallback(async () => {
     setLoadingSubtasks(true);
     const res = await fetch(`/api/tasks/${task.id}/subtasks`);
-    const json = (await res.json()) as { subtasks?: SubtaskItem[] };
-    setSubtasks(json.subtasks ?? []);
+    const json = (await res.json()) as SubtasksGetResponse | ApiErrorResponse;
+    setSubtasks("subtasks" in json ? json.subtasks : []);
     setLoadingSubtasks(false);
   }, [task.id]);
 
@@ -192,9 +204,9 @@ function TaskDetailModal({
           milestone_id: milestoneId || null,
         }),
       });
-      const json = (await res.json()) as { task?: TaskItem; error?: string };
-      if (!res.ok || !json.task) {
-        window.alert(json.error ?? "Failed to save task.");
+      const json = (await res.json()) as TaskUpdateResponse | ApiErrorResponse;
+      if (!res.ok || !("task" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to save task.");
         return;
       }
       onSaved(json.task);
@@ -209,13 +221,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: commentBody }),
       });
-      const json = (await res.json()) as { comment?: CommentItem; error?: string };
-      if (!res.ok) {
-        window.alert(json.error ?? "Failed to post comment.");
-        return;
-      }
-      if (!json.comment) {
-        window.alert("Failed to parse created comment.");
+      const json = (await res.json()) as CommentCreateResponse | ApiErrorResponse;
+      if (!res.ok || !("comment" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to post comment.");
         return;
       }
 
@@ -237,9 +245,9 @@ function TaskDetailModal({
       method: "POST",
       body: formData,
     });
-    const json = (await res.json()) as { error?: string };
+    const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
     if (!res.ok) {
-      window.alert(json.error ?? "Failed to upload attachment.");
+      window.alert(("error" in json ? json.error : undefined) ?? "Failed to upload attachment.");
       return false;
     }
     return true;
@@ -264,9 +272,9 @@ function TaskDetailModal({
           method: "DELETE",
         },
       );
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to delete attachment.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to delete attachment.");
         return;
       }
       await fetchComments();
@@ -276,8 +284,8 @@ function TaskDetailModal({
   const fetchMentionCandidates = useCallback(
     async (query: string) => {
       const res = await fetch(`/api/mentions?taskId=${task.id}&q=${encodeURIComponent(query)}`);
-      const json = (await res.json()) as { candidates?: MentionCandidate[] };
-      setMentionCandidates(json.candidates ?? []);
+      const json = (await res.json()) as MentionsGetResponse | ApiErrorResponse;
+      setMentionCandidates("candidates" in json ? json.candidates : []);
     },
     [task.id],
   );
@@ -311,9 +319,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body, parent_comment_id: parentCommentId }),
       });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        window.alert(json.error ?? "Failed to post reply.");
+      const json = (await res.json()) as CommentCreateResponse | ApiErrorResponse;
+      if (!res.ok || !("comment" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to post reply.");
         return;
       }
       setReplyBodies((prev) => ({ ...prev, [parentCommentId]: "" }));
@@ -330,9 +338,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: nextBody.trim() }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to edit comment.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to edit comment.");
         return;
       }
       await fetchComments();
@@ -346,9 +354,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emoji }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to update reaction.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to update reaction.");
         return;
       }
       await fetchComments();
@@ -362,9 +370,9 @@ function TaskDetailModal({
       const res = await fetch(`/api/tasks/${task.id}/comments/${comment.id}`, {
         method: "DELETE",
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to delete comment.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to delete comment.");
         return;
       }
       await fetchComments();
@@ -379,9 +387,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newSubtaskTitle }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to create subtask.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to create subtask.");
         return;
       }
       setNewSubtaskTitle("");
@@ -396,9 +404,9 @@ function TaskDetailModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to update subtask.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to update subtask.");
         return;
       }
       await fetchSubtasks();
@@ -410,9 +418,9 @@ function TaskDetailModal({
       const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, {
         method: "DELETE",
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
       if (!res.ok) {
-        window.alert(json.error ?? "Failed to delete subtask.");
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to delete subtask.");
         return;
       }
       await fetchSubtasks();
@@ -889,10 +897,10 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
       });
 
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({ error: "Failed to reorder tasks." }))) as {
-          error?: string;
-        };
-        window.alert(data.error ?? "Failed to reorder tasks.");
+        const json = (await res
+          .json()
+          .catch(() => ({ error: "Failed to reorder tasks." }))) as ApiOkResponse | ApiErrorResponse;
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to reorder tasks.");
       }
     });
   };
@@ -904,9 +912,9 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, columnId, title }),
       });
-      const json = (await res.json()) as { task?: TaskItem & { column_id: string }; error?: string };
-      if (!res.ok || !json.task) {
-        window.alert(json.error ?? "Failed to create task.");
+      const json = (await res.json()) as TaskCreateResponse | ApiErrorResponse;
+      if (!res.ok || !("task" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to create task.");
         return;
       }
 
@@ -918,13 +926,13 @@ export function BoardDnd({ projectId, initialColumns }: BoardDndProps) {
                 tasks: [
                   ...col.tasks,
                   {
-                    id: json.task!.id,
-                    title: json.task!.title,
-                    description: json.task!.description ?? null,
-                    priority: json.task!.priority,
-                    status: json.task!.status,
-                    assignee_id: json.task!.assignee_id ?? null,
-                    milestone_id: json.task!.milestone_id ?? null,
+                    id: json.task.id,
+                    title: json.task.title,
+                    description: json.task.description ?? null,
+                    priority: json.task.priority,
+                    status: json.task.status,
+                    assignee_id: json.task.assignee_id ?? null,
+                    milestone_id: json.task.milestone_id ?? null,
                   },
                 ],
               }

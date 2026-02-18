@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This repository contains the TaskFlow web app built with Next.js App Router + TypeScript.
 
 ## Getting Started
 
@@ -16,9 +16,22 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quality Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run all quality checks before creating a PR:
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+```
+
+## Contribution Workflow
+
+- Branch from `main` using `feature/*`, `fix/*`, or `chore/*`.
+- Open a PR to `main` using the repository PR template.
+- Ensure GitHub Actions CI is green before merge.
+- See `CONTRIBUTING.md` for full rules.
 
 ## Learn More
 

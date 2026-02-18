@@ -115,6 +115,17 @@ export async function createProjectAction(formData: FormData) {
     redirect(withQuery("/app", { error: toPublicErrorMessage(pmError, "Failed to add project owner.") }));
   }
 
+  const { error: columnError } = await admin.from("columns").insert([
+    { project_id: projectId, name: "To Do", sort_order: 100 },
+    { project_id: projectId, name: "In Progress", sort_order: 200 },
+    { project_id: projectId, name: "Review", sort_order: 300 },
+    { project_id: projectId, name: "Done", sort_order: 400 },
+  ]);
+
+  if (columnError) {
+    redirect(withQuery("/app", { error: toPublicErrorMessage(columnError, "Failed to initialize board columns.") }));
+  }
+
   await writeAuditLog(supabase, {
     teamId,
     actorUserId: user.id,

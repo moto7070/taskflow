@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { reorderPayloadSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface ReorderColumnPayload {
-  id: string;
-  taskIds: string[];
-}
-
-interface ReorderPayload {
-  projectId: string;
-  columns: ReorderColumnPayload[];
-}
 
 async function hasProjectAccess(projectId: string, userId: string) {
   const supabase = await createClient();
@@ -46,10 +37,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await req.json()) as ReorderPayload;
-  if (!payload?.projectId || !Array.isArray(payload.columns)) {
+  const parsed = reorderPayloadSchema.safeParse(await req.json());
+  if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
+  const payload = parsed.data;
 
   const canAccess = await hasProjectAccess(payload.projectId, user.id);
   if (!canAccess) {

@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { createWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface CreateWikiPagePayload {
-  title: string;
-  body?: string;
-}
 
 async function canAccessProject(projectId: string, userId: string) {
   const supabase = await createClient();
@@ -38,10 +34,10 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
-  const payload = (await req.json()) as CreateWikiPagePayload;
-  const title = payload?.title?.trim();
-  const body = payload?.body?.trim() ?? "";
-  if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
+  const parsed = createWikiPageSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const { title } = parsed.data;
+  const body = parsed.data.body ?? "";
 
   const supabase = await createClient();
   const {

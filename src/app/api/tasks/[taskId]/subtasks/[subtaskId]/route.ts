@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { updateSubtaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface UpdateSubtaskPayload {
-  title?: string;
-  is_done?: boolean;
-}
 
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
@@ -48,7 +44,9 @@ export async function PATCH(
   { params }: { params: Promise<{ taskId: string; subtaskId: string }> },
 ) {
   const { taskId, subtaskId } = await params;
-  const payload = (await req.json()) as UpdateSubtaskPayload;
+  const parsed = updateSubtaskSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const payload = parsed.data;
 
   const supabase = await createClient();
   const {
@@ -64,9 +62,7 @@ export async function PATCH(
 
   const updates: Record<string, string | boolean> = {};
   if (typeof payload.title === "string") {
-    const title = payload.title.trim();
-    if (!title) return NextResponse.json({ error: "Subtask title is required." }, { status: 400 });
-    updates.title = title;
+    updates.title = payload.title;
   }
   if (typeof payload.is_done === "boolean") updates.is_done = payload.is_done;
 

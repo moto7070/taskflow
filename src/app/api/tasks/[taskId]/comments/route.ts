@@ -3,11 +3,7 @@ import { NextResponse } from "next/server";
 import { getCommentAttachmentsBucket } from "@/lib/env";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
-
-interface CreateCommentPayload {
-  body: string;
-  parent_comment_id?: string | null;
-}
+import { createCommentSchema } from "@/lib/validations/api";
 
 interface ReactionSummaryItem {
   emoji: string;
@@ -199,10 +195,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 
 export async function POST(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = await params;
-  const payload = (await req.json()) as CreateCommentPayload;
-  const body = payload?.body?.trim();
-
-  if (!body) return NextResponse.json({ error: "Comment body is required." }, { status: 400 });
+  const parsed = createCommentSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const payload = parsed.data;
+  const body = payload.body;
 
   const supabase = await createClient();
   const {
@@ -214,7 +210,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
   if (!access.ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let parentCommentId: string | null = null;
-  if (typeof payload.parent_comment_id === "string" && payload.parent_comment_id.trim().length > 0) {
+  if (typeof payload.parent_comment_id === "string" && payload.parent_comment_id.length > 0) {
     const { data: parentComment } = await supabase
       .from("task_comments")
       .select("id")

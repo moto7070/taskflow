@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { createSubtaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface CreateSubtaskPayload {
-  title: string;
-}
 
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
@@ -54,9 +51,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 
 export async function POST(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = await params;
-  const payload = (await req.json()) as CreateSubtaskPayload;
-  const title = payload?.title?.trim();
-  if (!title) return NextResponse.json({ error: "Subtask title is required." }, { status: 400 });
+  const parsed = createSubtaskSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const { title } = parsed.data;
 
   const supabase = await createClient();
   const {

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { toggleReactionSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface ToggleReactionPayload {
-  emoji: string;
-}
 
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
@@ -45,9 +42,9 @@ export async function POST(
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
   const { taskId, commentId } = await params;
-  const payload = (await req.json()) as ToggleReactionPayload;
-  const emoji = payload?.emoji?.trim();
-  if (!emoji) return NextResponse.json({ error: "Emoji is required." }, { status: 400 });
+  const parsed = toggleReactionSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const { emoji } = parsed.data;
 
   const supabase = await createClient();
   const {

@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { createTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface CreateTaskPayload {
-  projectId: string;
-  columnId: string;
-  title: string;
-}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -18,10 +13,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await req.json()) as CreateTaskPayload;
-  if (!payload?.projectId || !payload?.columnId || !payload?.title?.trim()) {
+  const parsed = createTaskSchema.safeParse(await req.json());
+  if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
+  const payload = parsed.data;
 
   const { data: projectMember } = await supabase
     .from("project_members")
@@ -66,7 +62,7 @@ export async function POST(req: Request) {
     .insert({
       project_id: payload.projectId,
       column_id: payload.columnId,
-      title: payload.title.trim(),
+      title: payload.title,
       created_by: user.id,
       priority: "medium",
       status: "todo",

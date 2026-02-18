@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import { updateCommentSchema } from "@/lib/validations/api";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
-
-interface UpdateCommentPayload {
-  body: string;
-}
 
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
@@ -47,9 +44,9 @@ export async function PATCH(
   { params }: { params: Promise<{ taskId: string; commentId: string }> },
 ) {
   const { taskId, commentId } = await params;
-  const payload = (await req.json()) as UpdateCommentPayload;
-  const body = payload?.body?.trim();
-  if (!body) return NextResponse.json({ error: "Comment body is required." }, { status: 400 });
+  const parsed = updateCommentSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const body = parsed.data.body;
 
   const supabase = await createClient();
   const {

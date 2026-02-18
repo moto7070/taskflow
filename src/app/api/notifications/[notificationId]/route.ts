@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
 
+import { updateNotificationSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface UpdateNotificationPayload {
-  is_read: boolean;
-}
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ notificationId: string }> },
 ) {
   const { notificationId } = await params;
-  const payload = (await req.json()) as UpdateNotificationPayload;
-  if (typeof payload?.is_read !== "boolean") {
-    return NextResponse.json({ error: "is_read must be boolean." }, { status: 400 });
-  }
+  const parsed = updateNotificationSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const payload = parsed.data;
 
   const supabase = await createClient();
   const {

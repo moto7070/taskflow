@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { updateTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface UpdateTaskPayload {
-  title?: string;
-  description?: string | null;
-  priority?: "low" | "medium" | "high" | "critical";
-  status?: "todo" | "in_progress" | "review" | "done";
-  assignee_id?: string | null;
-  milestone_id?: string | null;
-}
 
 async function canAccessTask(taskId: string, userId: string) {
   const supabase = await createClient();
@@ -104,7 +96,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = await params;
-  const payload = (await req.json()) as UpdateTaskPayload;
+  const parsed = updateTaskSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const payload = parsed.data;
   const supabase = await createClient();
   const {
     data: { user },

@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { updateWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
-
-interface UpdateWikiPagePayload {
-  title?: string;
-  body?: string;
-}
 
 async function canAccessProject(projectId: string, userId: string) {
   const supabase = await createClient();
@@ -38,7 +34,9 @@ export async function PATCH(
   { params }: { params: Promise<{ projectId: string; pageId: string }> },
 ) {
   const { projectId, pageId } = await params;
-  const payload = (await req.json()) as UpdateWikiPagePayload;
+  const parsed = updateWikiPageSchema.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const payload = parsed.data;
 
   const supabase = await createClient();
   const {
@@ -64,9 +62,7 @@ export async function PATCH(
     updated_by: user.id,
   };
   if (typeof payload.title === "string") {
-    const title = payload.title.trim();
-    if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
-    updates.title = title;
+    updates.title = payload.title;
   }
   if (typeof payload.body === "string") updates.body = payload.body;
 

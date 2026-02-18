@@ -30,6 +30,7 @@ npm run test
 
 - See `.env.local.example` for local setup.
 - For production deployment, follow `docs/deploy/vercel-env-checklist.md`.
+- For post-deploy verification, follow `docs/deploy/release-smoke-checklist.md`.
 - Important: never expose secret keys as `NEXT_PUBLIC_*`.
 
 ## Contribution Workflow

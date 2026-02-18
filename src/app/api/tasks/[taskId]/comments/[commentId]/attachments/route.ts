@@ -7,6 +7,7 @@ import {
   getCommentAttachmentsBucket,
 } from "@/lib/env";
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
@@ -78,7 +79,12 @@ export async function GET(
     .eq("comment_id", commentId)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to load attachments.") },
+      { status: 500 },
+    );
+  }
 
   const admin = createAdminClient();
   const bucket = getCommentAttachmentsBucket();
@@ -166,7 +172,10 @@ export async function POST(
     upsert: false,
   });
   if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(uploadError, "Failed to upload attachment.") },
+      { status: 500 },
+    );
   }
 
   const { data: attachment, error: insertError } = await supabase
@@ -183,7 +192,10 @@ export async function POST(
 
   if (insertError || !attachment) {
     await admin.storage.from(bucket).remove([storagePath]);
-    return NextResponse.json({ error: insertError?.message ?? "Failed to save attachment." }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(insertError, "Failed to save attachment.") },
+      { status: 500 },
+    );
   }
 
   const { data: signed } = await admin.storage.from(bucket).createSignedUrl(storagePath, 60 * 60);

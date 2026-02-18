@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { updateNotificationSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -36,6 +37,11 @@ export async function PATCH(
     .select("id, is_read, read_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to update notification.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ notification: data });
 }

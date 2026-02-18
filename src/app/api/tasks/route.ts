@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -92,7 +93,10 @@ export async function POST(req: Request) {
     .single();
 
   if (error || !task) {
-    return NextResponse.json({ error: error?.message ?? "Failed to create task" }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to create task.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ task });

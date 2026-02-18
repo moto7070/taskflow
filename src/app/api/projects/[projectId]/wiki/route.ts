@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -80,7 +81,12 @@ export async function POST(
     .select("id, project_id, title, body, created_at, updated_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to create wiki page.") },
+      { status: 500 },
+    );
+  }
 
   const { error: revisionError } = await supabase.from("wiki_revisions").insert({
     page_id: data.id,
@@ -89,7 +95,10 @@ export async function POST(
   });
   if (revisionError) {
     return NextResponse.json(
-      { page: data, warning: "Page created but revision insert failed.", detail: revisionError.message },
+      {
+        page: data,
+        warning: toPublicErrorMessage(revisionError, "Page created but revision save failed."),
+      },
       { status: 200 },
     );
   }

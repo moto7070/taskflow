@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { updateWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -75,7 +76,7 @@ export async function PATCH(
     .is("deleted_at", null)
     .maybeSingle();
   if (existingPageError || !existingPage) {
-    return NextResponse.json({ error: existingPageError?.message ?? "Page not found." }, { status: 404 });
+    return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
   const updates: Record<string, string | null> = {
@@ -95,7 +96,12 @@ export async function PATCH(
     .select("id, project_id, title, body, created_at, updated_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to update wiki page.") },
+      { status: 500 },
+    );
+  }
 
   const nextBody = typeof payload.body === "string" ? payload.body : existingPage.body ?? "";
   if (nextBody !== (existingPage.body ?? "")) {
@@ -106,7 +112,10 @@ export async function PATCH(
     });
     if (revisionError) {
       return NextResponse.json(
-        { page: data, warning: "Page updated but revision insert failed.", detail: revisionError.message },
+        {
+          page: data,
+          warning: toPublicErrorMessage(revisionError, "Page updated but revision save failed."),
+        },
         { status: 200 },
       );
     }
@@ -158,6 +167,11 @@ export async function DELETE(
     .eq("project_id", projectId)
     .is("deleted_at", null);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to delete wiki page.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true });
 }

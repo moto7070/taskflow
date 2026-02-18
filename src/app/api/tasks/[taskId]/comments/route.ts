@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import type { ReactionSummaryItem } from "@/lib/types/domain";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -104,7 +105,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .eq("task_id", taskId)
     .order("created_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to load comments.") },
+      { status: 500 },
+    );
+  }
 
   const commentRows = (comments ?? []) as CommentRow[];
   const commentIds = commentRows.map((comment) => comment.id);
@@ -116,7 +122,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
           .in("comment_id", commentIds)
       : { data: [], error: null };
 
-  if (reactionsError) return NextResponse.json({ error: reactionsError.message }, { status: 500 });
+  if (reactionsError) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(reactionsError, "Failed to load comment reactions.") },
+      { status: 500 },
+    );
+  }
 
   const reactionMap = new Map<string, Map<string, ReactionSummaryItem>>();
   for (const reaction of reactions ?? []) {
@@ -139,7 +150,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
           .select("id, comment_id, file_name, mime_type, file_size, storage_path")
           .in("comment_id", commentIds)
       : { data: [], error: null };
-  if (attachmentsError) return NextResponse.json({ error: attachmentsError.message }, { status: 500 });
+  if (attachmentsError) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(attachmentsError, "Failed to load comment attachments.") },
+      { status: 500 },
+    );
+  }
 
   const admin = createAdminClient();
   const bucket = getCommentAttachmentsBucket();
@@ -249,7 +265,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     .select("id, body, author_id, parent_comment_id, created_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to post comment.") },
+      { status: 500 },
+    );
+  }
 
   const mentionedUserIds = (await resolveMentionedUserIds(access.projectId, body)).filter(
     (mentionedUserId) => mentionedUserId !== user.id,

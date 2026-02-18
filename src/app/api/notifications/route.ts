@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { createClient } from "@/utils/supabase/server";
 
 export async function GET(req: Request) {
@@ -24,6 +25,11 @@ export async function GET(req: Request) {
   if (unreadOnly) query = query.eq("is_read", false);
 
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to load notifications.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ notifications: data ?? [] });
 }

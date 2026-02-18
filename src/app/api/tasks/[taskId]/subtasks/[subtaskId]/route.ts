@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { updateSubtaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -84,7 +85,12 @@ export async function PATCH(
     .select("id, title, is_done, sort_order")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to update subtask.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ subtask: data });
 }
 
@@ -112,6 +118,11 @@ export async function DELETE(
   if (!exists) return NextResponse.json({ error: "Subtask not found." }, { status: 404 });
 
   const { error } = await supabase.from("task_subtasks").delete().eq("id", subtaskId).eq("task_id", taskId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to delete subtask.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true });
 }

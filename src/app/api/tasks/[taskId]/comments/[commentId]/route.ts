@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { updateCommentSchema } from "@/lib/validations/api";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -96,7 +97,12 @@ export async function PATCH(
     .select("id, body, author_id, created_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to edit comment.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ comment: data });
 }
 
@@ -147,7 +153,12 @@ export async function DELETE(
     .from("task_comments")
     .select("id, parent_comment_id")
     .eq("task_id", taskId);
-  if (allCommentsError) return NextResponse.json({ error: allCommentsError.message }, { status: 500 });
+  if (allCommentsError) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(allCommentsError, "Failed to load related comments.") },
+      { status: 500 },
+    );
+  }
 
   const childrenMap = new Map<string, string[]>();
   for (const row of allComments ?? []) {
@@ -171,10 +182,20 @@ export async function DELETE(
     .from("comment_attachments")
     .select("storage_path")
     .in("comment_id", targetCommentIds);
-  if (attachmentsError) return NextResponse.json({ error: attachmentsError.message }, { status: 500 });
+  if (attachmentsError) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(attachmentsError, "Failed to load attachments.") },
+      { status: 500 },
+    );
+  }
 
   const { error } = await supabase.from("task_comments").delete().eq("id", commentId).eq("task_id", taskId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to delete comment.") },
+      { status: 500 },
+    );
+  }
 
   const storagePaths = Array.from(
     new Set((attachments ?? []).map((attachment) => attachment.storage_path).filter(Boolean)),
@@ -188,8 +209,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         ok: true,
-        warning: "Comment deleted but attachment cleanup failed.",
-        detail: removeError.message,
+        warning: toPublicErrorMessage(removeError, "Comment deleted but attachment cleanup failed."),
       },
       { status: 200 },
     );

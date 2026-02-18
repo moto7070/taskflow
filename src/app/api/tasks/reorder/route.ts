@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { reorderPayloadSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
@@ -95,7 +96,10 @@ export async function POST(req: Request) {
         .eq("project_id", payload.projectId);
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json(
+          { error: toPublicErrorMessage(error, "Failed to reorder tasks.") },
+          { status: 500 },
+        );
       }
     }
   }

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getAppUrl } from "@/lib/app-url";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { sendInviteMail } from "@/lib/server/invite-email";
 import { createClient } from "@/utils/supabase/server";
 
@@ -56,7 +57,7 @@ export async function createTeamAction(formData: FormData) {
     .single();
 
   if (teamError || !team) {
-    redirect(withQuery("/app", { error: teamError?.message ?? "Failed to create team." }));
+    redirect(withQuery("/app", { error: toPublicErrorMessage(teamError, "Failed to create team.") }));
   }
 
   const { error: memberError } = await supabase.from("team_members").insert({
@@ -66,7 +67,7 @@ export async function createTeamAction(formData: FormData) {
   });
 
   if (memberError) {
-    redirect(withQuery("/app", { error: memberError.message }));
+    redirect(withQuery("/app", { error: toPublicErrorMessage(memberError, "Failed to add team owner.") }));
   }
 
   redirect(withQuery("/app", { message: "Team created." }));
@@ -97,7 +98,7 @@ export async function createProjectAction(formData: FormData) {
     .single();
 
   if (projectError || !project) {
-    redirect(withQuery("/app", { error: projectError?.message ?? "Failed to create project." }));
+    redirect(withQuery("/app", { error: toPublicErrorMessage(projectError, "Failed to create project.") }));
   }
 
   const { error: pmError } = await supabase.from("project_members").insert({
@@ -107,7 +108,7 @@ export async function createProjectAction(formData: FormData) {
   });
 
   if (pmError) {
-    redirect(withQuery("/app", { error: pmError.message }));
+    redirect(withQuery("/app", { error: toPublicErrorMessage(pmError, "Failed to add project owner.") }));
   }
 
   redirect(withQuery("/app", { message: "Project created." }));
@@ -142,7 +143,11 @@ export async function inviteMemberAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+    redirect(
+      withQuery(`/app/team/${teamId}/settings`, {
+        error: toPublicErrorMessage(error, "Failed to create invitation."),
+      }),
+    );
   }
 
   const inviteUrl = `${getAppUrl()}/invite/${token}`;
@@ -190,7 +195,11 @@ export async function updateMemberRoleAction(formData: FormData) {
     .eq("user_id", memberId);
 
   if (error) {
-    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+    redirect(
+      withQuery(`/app/team/${teamId}/settings`, {
+        error: toPublicErrorMessage(error, "Failed to update member role."),
+      }),
+    );
   }
 
   redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Role updated." }));
@@ -221,7 +230,11 @@ export async function removeMemberAction(formData: FormData) {
     .eq("user_id", memberId);
 
   if (error) {
-    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+    redirect(
+      withQuery(`/app/team/${teamId}/settings`, {
+        error: toPublicErrorMessage(error, "Failed to remove member."),
+      }),
+    );
   }
 
   redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Member removed." }));
@@ -268,7 +281,7 @@ export async function acceptInvitationAction(formData: FormData) {
   });
 
   if (memberError && !memberError.message.toLowerCase().includes("duplicate")) {
-    redirect(withQuery("/app", { error: memberError.message }));
+    redirect(withQuery("/app", { error: toPublicErrorMessage(memberError, "Failed to accept invitation.") }));
   }
 
   await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id);

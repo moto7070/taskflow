@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { updateTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -55,7 +56,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .eq("id", taskId)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to load task details.") },
+      { status: 500 },
+    );
+  }
 
   const { data: projectMembers, error: projectMembersError } = await supabase
     .from("project_members")
@@ -63,7 +69,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .eq("project_id", access.projectId);
 
   if (projectMembersError) {
-    return NextResponse.json({ error: projectMembersError.message }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(projectMembersError, "Failed to load assignee candidates.") },
+      { status: 500 },
+    );
   }
 
   const candidateIds = Array.from(new Set((projectMembers ?? []).map((member) => member.user_id)));
@@ -73,7 +82,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
       : { data: [], error: null };
 
   if (profilesError) {
-    return NextResponse.json({ error: profilesError.message }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(profilesError, "Failed to load profile data.") },
+      { status: 500 },
+    );
   }
 
   const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile.display_name]));
@@ -89,7 +101,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .order("due_date", { ascending: true });
 
   if (milestonesError) {
-    return NextResponse.json({ error: milestonesError.message }, { status: 500 });
+    return NextResponse.json(
+      { error: toPublicErrorMessage(milestonesError, "Failed to load milestones.") },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ task, assigneeCandidates, milestoneCandidates: milestones ?? [] });
@@ -171,6 +186,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     .select("id, title, description, priority, status, assignee_id, milestone_id, column_id")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to update task.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ task });
 }

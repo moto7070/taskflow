@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { createClient } from "@/utils/supabase/server";
 
 export async function POST(req: Request) {
@@ -21,6 +22,11 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .eq("is_read", false);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to mark notifications as read.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true });
 }

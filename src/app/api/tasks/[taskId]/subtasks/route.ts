@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { createSubtaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -46,7 +47,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
     .eq("task_id", taskId)
     .order("sort_order", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to load subtasks.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ subtasks: data ?? [] });
 }
 
@@ -85,6 +91,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     .select("id, title, is_done, sort_order")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to create subtask.") },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ subtask: data });
 }

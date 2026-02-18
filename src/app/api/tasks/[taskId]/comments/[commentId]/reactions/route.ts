@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyCsrfOrigin } from "@/lib/security/csrf";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { toggleReactionSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -79,14 +80,24 @@ export async function POST(
 
   if (existing) {
     const { error } = await supabase.from("comment_reactions").delete().eq("id", existing.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json(
+        { error: toPublicErrorMessage(error, "Failed to update reaction.") },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ reacted: false });
   }
 
   const { error } = await supabase
     .from("comment_reactions")
     .insert({ comment_id: commentId, user_id: user.id, emoji });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json(
+      { error: toPublicErrorMessage(error, "Failed to update reaction.") },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ reacted: true });
 }

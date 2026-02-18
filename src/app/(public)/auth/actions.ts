@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getAppUrl } from "@/lib/app-url";
+import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { createClient } from "@/utils/supabase/server";
 
 function withQuery(path: string, params: Record<string, string>): string {
@@ -33,7 +34,7 @@ export async function signupAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(withQuery("/auth/signup", { error: error.message }));
+    redirect(withQuery("/auth/signup", { error: toPublicErrorMessage(error, "Sign up failed.") }));
   }
 
   redirect(withQuery("/auth/login", { message: "確認メールを送信しました" }));
@@ -54,7 +55,7 @@ export async function loginAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(withQuery("/auth/login", { error: error.message }));
+    redirect(withQuery("/auth/login", { error: toPublicErrorMessage(error, "Login failed.") }));
   }
 
   redirect("/app");
@@ -74,7 +75,7 @@ export async function googleLoginAction(formData: FormData) {
   if (error || !data.url) {
     redirect(
       withQuery("/auth/login", {
-        error: error?.message ?? "Google login could not be started.",
+        error: toPublicErrorMessage(error, "Google login could not be started."),
       }),
     );
   }
@@ -95,7 +96,11 @@ export async function forgotPasswordAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(withQuery("/auth/forgot-password", { error: error.message }));
+    redirect(
+      withQuery("/auth/forgot-password", {
+        error: toPublicErrorMessage(error, "Failed to send password reset email."),
+      }),
+    );
   }
 
   redirect(withQuery("/auth/forgot-password", { message: "再設定メールを送信しました" }));
@@ -120,7 +125,11 @@ export async function resetPasswordAction(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
-    redirect(withQuery("/auth/reset-password", { error: error.message }));
+    redirect(
+      withQuery("/auth/reset-password", {
+        error: toPublicErrorMessage(error, "Failed to update password."),
+      }),
+    );
   }
 
   redirect(withQuery("/auth/login", { message: "パスワードを更新しました" }));

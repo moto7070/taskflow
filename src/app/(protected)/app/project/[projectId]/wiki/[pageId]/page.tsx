@@ -31,6 +31,13 @@ export default async function WikiDetailPage({ params }: WikiDetailPageProps) {
     .is("deleted_at", null)
     .maybeSingle();
 
+  const { data: revisions } = await supabase
+    .from("wiki_revisions")
+    .select("id, edited_at")
+    .eq("page_id", pageId)
+    .order("edited_at", { ascending: false })
+    .limit(10);
+
   if (!page) {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-8">
@@ -81,6 +88,21 @@ export default async function WikiDetailPage({ params }: WikiDetailPageProps) {
         <article className="rounded-xl border border-slate-200 bg-white p-6">
           <pre className="whitespace-pre-wrap break-words text-sm text-slate-800">{page.body || ""}</pre>
         </article>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-slate-900">Revision History (latest 10)</h2>
+          <div className="mt-3 space-y-2">
+            {revisions?.length ? (
+              revisions.map((revision) => (
+                <p key={revision.id} className="text-xs text-slate-600">
+                  {new Date(revision.edited_at).toLocaleString()}
+                </p>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500">No revisions yet.</p>
+            )}
+          </div>
+        </section>
       </div>
     </main>
   );

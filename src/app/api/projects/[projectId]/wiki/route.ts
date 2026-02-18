@@ -65,5 +65,18 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const { error: revisionError } = await supabase.from("wiki_revisions").insert({
+    page_id: data.id,
+    body: data.body ?? "",
+    edited_by: user.id,
+  });
+  if (revisionError) {
+    return NextResponse.json(
+      { page: data, warning: "Page created but revision insert failed.", detail: revisionError.message },
+      { status: 200 },
+    );
+  }
+
   return NextResponse.json({ page: data });
 }

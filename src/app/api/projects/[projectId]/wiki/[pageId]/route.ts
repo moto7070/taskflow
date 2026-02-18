@@ -49,6 +49,17 @@ export async function PATCH(
   const hasAccess = await canAccessProject(projectId, user.id);
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const { data: existingPage, error: existingPageError } = await supabase
+    .from("wiki_pages")
+    .select("id, body")
+    .eq("id", pageId)
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (existingPageError || !existingPage) {
+    return NextResponse.json({ error: existingPageError?.message ?? "Page not found." }, { status: 404 });
+  }
+
   const updates: Record<string, string | null> = {
     updated_by: user.id,
   };
@@ -69,6 +80,22 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const nextBody = typeof payload.body === "string" ? payload.body : existingPage.body ?? "";
+  if (nextBody !== (existingPage.body ?? "")) {
+    const { error: revisionError } = await supabase.from("wiki_revisions").insert({
+      page_id: data.id,
+      body: nextBody,
+      edited_by: user.id,
+    });
+    if (revisionError) {
+      return NextResponse.json(
+        { page: data, warning: "Page updated but revision insert failed.", detail: revisionError.message },
+        { status: 200 },
+      );
+    }
+  }
+
   return NextResponse.json({ page: data });
 }
 

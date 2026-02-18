@@ -67,3 +67,19 @@ export interface WikiUpsertResponse {
   warning?: string;
   detail?: string;
 }
+
+export interface MilestonesGetResponse {
+  milestones: MilestoneCandidate[];
+}
+
+export interface MilestoneUpsertResponse {
+  milestone: MilestoneCandidate;
+}
+
+export interface ColumnUpsertResponse {
+  column: {
+    id: string;
+    name: string;
+    sort_order: number;
+  };
+}

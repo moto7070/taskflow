@@ -70,3 +70,27 @@ export const updateWikiPageSchema = z
 export const updateNotificationSchema = z.object({
   is_read: z.boolean(),
 });
+
+export const createMilestoneSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  due_date: z.string().date(),
+  status: z.enum(["planned", "done"]).optional(),
+});
+
+export const updateMilestoneSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    due_date: z.string().date().optional(),
+    status: z.enum(["planned", "done"]).optional(),
+  })
+  .refine((value) => value.name !== undefined || value.due_date !== undefined || value.status !== undefined, {
+    message: "No updates.",
+  });
+
+export const createColumnSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
+export const updateColumnSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});

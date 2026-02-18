@@ -46,6 +46,18 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
     .eq("project_id", projectId)
     .order("sort_order", { ascending: true });
 
+  const { data: memberRows } = await supabase
+    .from("project_members")
+    .select("user_id, profiles(display_name)")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  const memberLabels =
+    memberRows?.map((memberRow) => {
+      const profile = Array.isArray(memberRow.profiles) ? memberRow.profiles[0] : memberRow.profiles;
+      return profile?.display_name ?? memberRow.user_id;
+    }) ?? [];
+
   const boardColumns =
     columns?.map((column) => ({
       id: column.id,
@@ -66,15 +78,12 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
     })) ?? [];
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8">
-      <div className="mx-auto w-full max-w-7xl space-y-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <h1 className="text-2xl font-semibold text-slate-900">{project?.name ?? "Project Board"}</h1>
-          <p className="mt-1 text-sm text-slate-600">projectId: {projectId}</p>
-        </div>
-
+    <main className="min-h-screen bg-slate-50 px-6 py-6">
+      <div className="mx-auto w-full max-w-[1400px]">
         <BoardDnd
           projectId={projectId}
+          projectName={project?.name ?? "Project Board"}
+          memberLabels={memberLabels}
           initialColumns={boardColumns}
           milestones={
             milestones?.map((milestone) => ({

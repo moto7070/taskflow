@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
@@ -22,9 +22,12 @@ import { X } from "lucide-react";
 import type {
   ApiErrorResponse,
   ApiOkResponse,
+  ColumnUpsertResponse,
   CommentCreateResponse,
   CommentsGetResponse,
+  MilestoneUpsertResponse,
   MentionsGetResponse,
+  MilestonesGetResponse,
   SubtasksGetResponse,
   TaskCreateResponse,
   TaskDetailResponse,
@@ -42,11 +45,13 @@ import type {
 
 interface BoardDndProps {
   projectId: string;
+  projectName: string;
+  memberLabels: string[];
   initialColumns: BoardColumn[];
   milestones: MilestoneCandidate[];
 }
 
-const REACTION_OPTIONS = ["👍", "❤️", "🎉", "👀"] as const;
+const REACTION_OPTIONS = ["like", "celebrate", "eyes", "rocket"] as const;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -834,19 +839,64 @@ function ColumnContainer({
   column,
   onOpenTask,
   onCreateTask,
+  onRenameColumn,
   canReorder,
 }: {
   column: BoardColumn;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (columnId: string, title: string) => void;
+  onRenameColumn: (columnId: string, nextName: string) => void;
   canReorder: boolean;
 }) {
   const [newTitle, setNewTitle] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(column.name);
 
   return (
     <div className="w-72 flex-shrink-0 rounded-lg border border-slate-200 bg-slate-100 p-3">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-800">{column.name}</h2>
+        <div className="flex items-center gap-2">
+          {editingTitle ? (
+            <input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => {
+                const nextName = titleDraft.trim();
+                if (nextName && nextName !== column.name) {
+                  onRenameColumn(column.id, nextName);
+                }
+                setEditingTitle(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const nextName = titleDraft.trim();
+                  if (nextName && nextName !== column.name) {
+                    onRenameColumn(column.id, nextName);
+                  }
+                  setEditingTitle(false);
+                }
+                if (e.key === "Escape") {
+                  setTitleDraft(column.name);
+                  setEditingTitle(false);
+                }
+              }}
+              className="w-36 rounded border border-slate-300 px-2 py-1 text-xs font-semibold"
+              autoFocus
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setTitleDraft(column.name);
+                setEditingTitle(true);
+              }}
+              className="rounded px-1 py-0.5 text-left text-sm font-semibold text-slate-800 hover:bg-slate-200"
+              title="Rename column"
+            >
+              {column.name}
+            </button>
+          )}
+        </div>
         <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
           {column.tasks.length}
         </span>
@@ -881,12 +931,19 @@ function ColumnContainer({
   );
 }
 
-export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProps) {
+export function BoardDnd({
+  projectId,
+  projectName,
+  memberLabels,
+  initialColumns,
+  milestones: initialMilestones,
+}: BoardDndProps) {
   const [columns, setColumns] = useState(initialColumns);
+  const [milestones, setMilestones] = useState(initialMilestones);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [milestoneFilter, setMilestoneFilter] = useState<string>("__all");
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor));
   const canReorder = milestoneFilter === "__all";
 
@@ -975,6 +1032,143 @@ export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProp
     });
   };
 
+  const createTaskFromHeader = () => {
+    const targetColumn = visibleColumns[0] ?? columns[0];
+    if (!targetColumn) {
+      window.alert("Create a column first.");
+      return;
+    }
+    const title = window.prompt("Task title");
+    if (!title || !title.trim()) return;
+    createTask(targetColumn.id, title.trim());
+  };
+
+  const addColumn = () => {
+    const name = window.prompt("Column name");
+    if (!name || !name.trim()) return;
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/columns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const json = (await res.json()) as ColumnUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("column" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to add column.");
+        return;
+      }
+      setColumns((prev) => [
+        ...prev,
+        {
+          id: json.column.id,
+          name: json.column.name,
+          sortOrder: json.column.sort_order,
+          tasks: [],
+        },
+      ]);
+    });
+  };
+
+  const renameColumn = (columnId: string, nextName: string) => {
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/columns/${columnId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+      const json = (await res.json()) as ColumnUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("column" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to rename column.");
+        return;
+      }
+      setColumns((prev) =>
+        prev.map((column) => (column.id === columnId ? { ...column, name: json.column.name } : column)),
+      );
+    });
+  };
+
+  const refreshMilestones = useCallback(async () => {
+    const res = await fetch(`/api/projects/${projectId}/milestones`);
+    const json = (await res.json()) as MilestonesGetResponse | ApiErrorResponse;
+    if (!res.ok || !("milestones" in json)) return;
+    setMilestones(json.milestones);
+  }, [projectId]);
+
+  const createMilestone = () => {
+    const name = window.prompt("Milestone name");
+    if (!name || !name.trim()) return;
+    const dueDate = window.prompt("Due date (YYYY-MM-DD)");
+    if (!dueDate || !dueDate.trim()) return;
+
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/milestones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), due_date: dueDate.trim() }),
+      });
+      const json = (await res.json()) as MilestoneUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("milestone" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to create milestone.");
+        return;
+      }
+      await refreshMilestones();
+    });
+  };
+
+  const editMilestone = (milestone: MilestoneCandidate) => {
+    const nextName = window.prompt("Milestone name", milestone.name);
+    if (!nextName || !nextName.trim()) return;
+    const nextDueDate = window.prompt("Due date (YYYY-MM-DD)", milestone.due_date);
+    if (!nextDueDate || !nextDueDate.trim()) return;
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/milestones/${milestone.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName.trim(), due_date: nextDueDate.trim() }),
+      });
+      const json = (await res.json()) as MilestoneUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("milestone" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to update milestone.");
+        return;
+      }
+      await refreshMilestones();
+    });
+  };
+
+  const toggleMilestoneDone = (milestone: MilestoneCandidate) => {
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/milestones/${milestone.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: milestone.status === "done" ? "planned" : "done" }),
+      });
+      const json = (await res.json()) as MilestoneUpsertResponse | ApiErrorResponse;
+      if (!res.ok || !("milestone" in json)) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to update milestone status.");
+        return;
+      }
+      await refreshMilestones();
+    });
+  };
+
+  const deleteMilestone = (milestone: MilestoneCandidate) => {
+    if (!window.confirm(`Delete milestone "${milestone.name}"?`)) return;
+    startTransition(async () => {
+      const res = await fetch(`/api/projects/${projectId}/milestones/${milestone.id}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as ApiOkResponse | ApiErrorResponse;
+      if (!res.ok) {
+        window.alert(("error" in json ? json.error : undefined) ?? "Failed to delete milestone.");
+        return;
+      }
+      if (milestoneFilter === milestone.id) {
+        setMilestoneFilter("__all");
+      }
+      await refreshMilestones();
+    });
+  };
+
   const onDragStart = (event: DragStartEvent) => {
     if (!canReorder) return;
     setActiveTaskId(String(event.active.id));
@@ -1016,55 +1210,162 @@ export function BoardDnd({ projectId, initialColumns, milestones }: BoardDndProp
   };
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="space-y-1">
-          <p className="text-sm text-slate-500">
-            Drag and drop tasks to reorder or move between columns.
-          </p>
-          {!canReorder ? (
-            <p className="text-xs text-amber-600">Reordering is disabled while a milestone filter is active.</p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="milestone-filter" className="text-xs text-slate-600">
-            Milestone
-          </label>
-          <select
-            id="milestone-filter"
-            value={milestoneFilter}
-            onChange={(e) => setMilestoneFilter(e.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+    <section className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Milestones</p>
+          <button
+            type="button"
+            onClick={createMilestone}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
           >
-            <option value="__all">All</option>
-            <option value="__none">No milestone</option>
-            {milestones.map((milestone) => (
-              <option key={milestone.id} value={milestone.id}>
-                {milestone.name} ({milestone.status})
-              </option>
-            ))}
-          </select>
+            + Add milestone
+          </button>
         </div>
-        {isPending ? <p className="text-xs text-slate-500">Saving...</p> : null}
-      </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {visibleColumns.map((column) => (
-            <ColumnContainer
-              key={column.id}
-              column={column}
-              onOpenTask={setSelectedTaskId}
-              onCreateTask={createTask}
-              canReorder={canReorder}
-            />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setMilestoneFilter("__all")}
+            className={`whitespace-nowrap rounded px-2 py-1 text-xs ${
+              milestoneFilter === "__all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setMilestoneFilter("__none")}
+            className={`whitespace-nowrap rounded px-2 py-1 text-xs ${
+              milestoneFilter === "__none" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            No milestone
+          </button>
+          {milestones.map((milestone) => (
+            <div key={milestone.id} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setMilestoneFilter(milestone.id)}
+                className={`whitespace-nowrap rounded px-2 py-1 text-xs ${
+                  milestoneFilter === milestone.id
+                    ? "bg-indigo-600 text-white"
+                    : milestone.status === "done"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-orange-100 text-orange-700"
+                }`}
+              >
+                {milestone.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleMilestoneDone(milestone)}
+                className="rounded border border-slate-300 px-1 py-0.5 text-[10px]"
+                title="Toggle done"
+              >
+                {milestone.status === "done" ? "Undo" : "Done"}
+              </button>
+              <button
+                type="button"
+                onClick={() => editMilestone(milestone)}
+                className="rounded border border-slate-300 px-1 py-0.5 text-[10px]"
+                title="Edit"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMilestone(milestone)}
+                className="rounded border border-rose-300 px-1 py-0.5 text-[10px] text-rose-700"
+                title="Delete"
+              >
+                Del
+              </button>
+            </div>
           ))}
         </div>
-      </DndContext>
+      </div>
+
+      <div className="flex gap-4">
+        <aside className="hidden w-60 flex-shrink-0 rounded-xl border border-slate-200 bg-white p-4 lg:block">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Workspace</p>
+          <div className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white">{projectName}</div>
+          <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Members</p>
+          <div className="space-y-2">
+            {memberLabels.length ? (
+              memberLabels.map((member) => (
+                <div key={member} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700">
+                  {member}
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500">No members</p>
+            )}
+          </div>
+        </aside>
+
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">{projectName}</h2>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={createTaskFromHeader}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
+                >
+                  + Task
+                </button>
+                <button
+                  type="button"
+                  onClick={addColumn}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  + Column
+                </button>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500">Drag and drop tasks to reorder or move between columns.</p>
+              {!canReorder ? (
+                <p className="text-xs text-amber-600">Reordering is disabled while a milestone filter is active.</p>
+              ) : null}
+            </div>
+          </div>
+
+          {milestoneFilter !== "__all" ? (
+            <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+              Milestone filter active
+            </div>
+          ) : null}
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+          >
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {visibleColumns.map((column) => (
+                <ColumnContainer
+                  key={column.id}
+                  column={column}
+                  onOpenTask={setSelectedTaskId}
+                  onCreateTask={createTask}
+                  onRenameColumn={renameColumn}
+                  canReorder={canReorder}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={addColumn}
+                className="h-12 w-72 flex-shrink-0 rounded-lg border-2 border-dashed border-slate-300 text-xs text-slate-500 hover:border-slate-400"
+              >
+                + Add column
+              </button>
+            </div>
+          </DndContext>
+        </div>
+      </div>
       {activeTaskId ? <p className="text-xs text-slate-500">Dragging: {activeTaskId}</p> : null}
 
       {selectedTask ? (

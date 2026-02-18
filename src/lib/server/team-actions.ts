@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { redirect } from "next/navigation";
 
@@ -6,6 +6,7 @@ import { getAppUrl } from "@/lib/app-url";
 import { writeAuditLog } from "@/lib/server/audit-log";
 import { toPublicErrorMessage } from "@/lib/server/error-policy";
 import { sendInviteMail } from "@/lib/server/invite-email";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 function withQuery(path: string, params: Record<string, string>): string {
@@ -49,10 +50,11 @@ export async function createTeamAction(formData: FormData) {
     redirect(withQuery("/app", { error: "Team name is required." }));
   }
 
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
   const teamId = crypto.randomUUID();
+  const admin = createAdminClient();
 
-  const { error: teamError } = await supabase
+  const { error: teamError } = await admin
     .from("teams")
     .insert({ id: teamId, name: teamName, created_by: user.id });
 
@@ -60,7 +62,7 @@ export async function createTeamAction(formData: FormData) {
     redirect(withQuery("/app", { error: toPublicErrorMessage(teamError, "Failed to create team.") }));
   }
 
-  const { error: memberError } = await supabase.from("team_members").insert({
+  const { error: memberError } = await admin.from("team_members").insert({
     team_id: teamId,
     user_id: user.id,
     role: "admin",
@@ -375,3 +377,7 @@ export async function acceptInvitationAction(formData: FormData) {
 
   redirect(withQuery("/app", { message: "Invitation accepted." }));
 }
+
+
+
+

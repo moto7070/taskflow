@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import type { ReactionSummaryItem } from "@/lib/types/domain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { createCommentSchema } from "@/lib/validations/api";
-
-interface ReactionSummaryItem {
-  emoji: string;
-  count: number;
-  reacted_by_me: boolean;
-}
 
 interface CommentRow {
   id: string;

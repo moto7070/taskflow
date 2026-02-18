@@ -19,69 +19,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
-
-interface TaskItem {
-  id: string;
-  title: string;
-  description: string | null;
-  priority: "low" | "medium" | "high" | "critical";
-  status: "todo" | "in_progress" | "review" | "done";
-  assignee_id: string | null;
-  milestone_id: string | null;
-}
-
-interface BoardColumn {
-  id: string;
-  name: string;
-  sortOrder: number;
-  tasks: TaskItem[];
-}
-
-interface CommentItem {
-  id: string;
-  body: string;
-  author_id: string;
-  parent_comment_id: string | null;
-  created_at: string;
-  reaction_summary?: Array<{
-    emoji: string;
-    count: number;
-    reacted_by_me: boolean;
-  }>;
-  attachments?: Array<{
-    id: string;
-    file_name: string;
-    mime_type: string;
-    file_size: number;
-    signed_url: string | null;
-  }>;
-  replies?: CommentItem[];
-}
-
-interface SubtaskItem {
-  id: string;
-  title: string;
-  is_done: boolean;
-  sort_order: number;
-}
-
-interface AssigneeCandidate {
-  id: string;
-  display_name: string | null;
-}
-
-interface MilestoneCandidate {
-  id: string;
-  name: string;
-  status: "planned" | "done";
-  due_date: string;
-}
-
-interface MentionCandidate {
-  id: string;
-  display_name: string | null;
-  label: string;
-}
+import type {
+  AssigneeCandidate,
+  BoardColumn,
+  CommentItem,
+  MentionCandidate,
+  MilestoneCandidate,
+  SubtaskItem,
+  TaskItem,
+} from "@/lib/types/domain";
 
 interface BoardDndProps {
   projectId: string;

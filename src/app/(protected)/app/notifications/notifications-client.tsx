@@ -2,19 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-
-interface NotificationItem {
-  id: string;
-  type: "mention";
-  body: string | null;
-  is_read: boolean;
-  read_at: string | null;
-  created_at: string;
-  project_id: string | null;
-  task_id: string | null;
-  comment_id: string | null;
-  metadata: Record<string, unknown>;
-}
+import type { NotificationItem } from "@/lib/types/domain";
 
 export function NotificationsClient() {
   const [items, setItems] = useState<NotificationItem[]>([]);

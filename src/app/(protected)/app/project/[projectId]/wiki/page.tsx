@@ -13,8 +13,8 @@ export default async function ProjectWikiPage({ params }: ProjectWikiPageProps) 
   if (!hasAccess) {
     return (
       <AccessDenied
-        title="プロジェクトにアクセスできません"
-        description="このWikiはプロジェクト参加メンバーのみ閲覧できます。"
+        title="You do not have access to this project."
+        description="Wiki pages are available only to project members."
       />
     );
   }
@@ -24,7 +24,7 @@ export default async function ProjectWikiPage({ params }: ProjectWikiPageProps) 
       <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white p-6">
         <h1 className="text-xl font-semibold text-slate-900">Project Wiki</h1>
         <p className="mt-2 text-sm text-slate-600">projectId: {projectId}</p>
-        <p className="mt-2 text-sm text-slate-600">Wiki一覧/編集機能は次ステップで実装します。</p>
+        <p className="mt-2 text-sm text-slate-600">Wiki list and editor UI will be implemented next.</p>
       </div>
     </main>
   );

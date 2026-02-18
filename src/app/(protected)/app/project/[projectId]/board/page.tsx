@@ -13,8 +13,8 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
   if (!hasAccess) {
     return (
       <AccessDenied
-        title="プロジェクトにアクセスできません"
-        description="このプロジェクトのメンバーに招待されていない可能性があります。"
+        title="You do not have access to this project."
+        description="Ask a team admin to add you to the project."
       />
     );
   }
@@ -24,7 +24,7 @@ export default async function ProjectBoardPage({ params }: ProjectBoardPageProps
       <div className="mx-auto w-full max-w-6xl rounded-xl border border-slate-200 bg-white p-6">
         <h1 className="text-xl font-semibold text-slate-900">Project Board</h1>
         <p className="mt-2 text-sm text-slate-600">projectId: {projectId}</p>
-        <p className="mt-2 text-sm text-slate-600">カンバンとD&Dは次ステップで実装します。</p>
+        <p className="mt-2 text-sm text-slate-600">Board and drag-and-drop UI will be implemented next.</p>
       </div>
     </main>
   );

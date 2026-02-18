@@ -1,0 +1,254 @@
+"use server";
+
+import { redirect } from "next/navigation";
+
+import { createClient } from "@/utils/supabase/server";
+
+function withQuery(path: string, params: Record<string, string>): string {
+  const search = new URLSearchParams(params);
+  return `${path}?${search.toString()}`;
+}
+
+function getString(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function requireUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  return { supabase, user };
+}
+
+async function assertTeamAdmin(teamId: string, userId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("team_members")
+    .select("role")
+    .eq("team_id", teamId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return data?.role === "admin";
+}
+
+export async function createTeamAction(formData: FormData) {
+  const teamName = getString(formData, "team_name");
+  if (!teamName) {
+    redirect(withQuery("/app", { error: "Team name is required." }));
+  }
+
+  const { supabase, user } = await requireUser();
+
+  const { data: team, error: teamError } = await supabase
+    .from("teams")
+    .insert({ name: teamName, created_by: user.id })
+    .select("id")
+    .single();
+
+  if (teamError || !team) {
+    redirect(withQuery("/app", { error: teamError?.message ?? "Failed to create team." }));
+  }
+
+  const { error: memberError } = await supabase.from("team_members").insert({
+    team_id: team.id,
+    user_id: user.id,
+    role: "admin",
+  });
+
+  if (memberError) {
+    redirect(withQuery("/app", { error: memberError.message }));
+  }
+
+  redirect(withQuery("/app", { message: "Team created." }));
+}
+
+export async function createProjectAction(formData: FormData) {
+  const teamId = getString(formData, "team_id");
+  const projectName = getString(formData, "project_name");
+
+  if (!teamId || !projectName) {
+    redirect(withQuery("/app", { error: "Team and project name are required." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const canManage = await assertTeamAdmin(teamId, user.id);
+  if (!canManage) {
+    redirect(withQuery("/app", { error: "Only team admins can create projects." }));
+  }
+
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .insert({
+      team_id: teamId,
+      name: projectName,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (projectError || !project) {
+    redirect(withQuery("/app", { error: projectError?.message ?? "Failed to create project." }));
+  }
+
+  const { error: pmError } = await supabase.from("project_members").insert({
+    project_id: project.id,
+    user_id: user.id,
+    role: "admin",
+  });
+
+  if (pmError) {
+    redirect(withQuery("/app", { error: pmError.message }));
+  }
+
+  redirect(withQuery("/app", { message: "Project created." }));
+}
+
+export async function inviteMemberAction(formData: FormData) {
+  const teamId = getString(formData, "team_id");
+  const email = getString(formData, "email").toLowerCase();
+  const role = getString(formData, "role") || "user";
+
+  if (!teamId || !email) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Email is required." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const canManage = await assertTeamAdmin(teamId, user.id);
+  if (!canManage) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Only team admins can invite members." }));
+  }
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+
+  const { error } = await supabase.from("invitations").insert({
+    team_id: teamId,
+    email,
+    role: role === "admin" ? "admin" : "user",
+    token,
+    expires_at: expiresAt,
+    created_by: user.id,
+  });
+
+  if (error) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+  }
+
+  redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Invitation created." }));
+}
+
+export async function updateMemberRoleAction(formData: FormData) {
+  const teamId = getString(formData, "team_id");
+  const memberId = getString(formData, "member_id");
+  const role = getString(formData, "role");
+
+  if (!teamId || !memberId || !role) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Missing parameters." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const canManage = await assertTeamAdmin(teamId, user.id);
+  if (!canManage) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Only team admins can update roles." }));
+  }
+
+  const { error } = await supabase
+    .from("team_members")
+    .update({ role: role === "admin" ? "admin" : "user" })
+    .eq("team_id", teamId)
+    .eq("user_id", memberId);
+
+  if (error) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+  }
+
+  redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Role updated." }));
+}
+
+export async function removeMemberAction(formData: FormData) {
+  const teamId = getString(formData, "team_id");
+  const memberId = getString(formData, "member_id");
+
+  if (!teamId || !memberId) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Missing parameters." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const canManage = await assertTeamAdmin(teamId, user.id);
+  if (!canManage) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "Only team admins can remove members." }));
+  }
+
+  if (memberId === user.id) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: "You cannot remove yourself." }));
+  }
+
+  const { error } = await supabase
+    .from("team_members")
+    .delete()
+    .eq("team_id", teamId)
+    .eq("user_id", memberId);
+
+  if (error) {
+    redirect(withQuery(`/app/team/${teamId}/settings`, { error: error.message }));
+  }
+
+  redirect(withQuery(`/app/team/${teamId}/settings`, { message: "Member removed." }));
+}
+
+export async function acceptInvitationAction(formData: FormData) {
+  const token = getString(formData, "token");
+  if (!token) {
+    redirect(withQuery("/app", { error: "Invalid invitation token." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const userEmail = user.email?.toLowerCase();
+  if (!userEmail) {
+    redirect(withQuery("/app", { error: "Your account email is missing." }));
+  }
+
+  const { data: invitation, error: inviteError } = await supabase
+    .from("invitations")
+    .select("id, team_id, email, role, expires_at, accepted_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (inviteError || !invitation) {
+    redirect(withQuery("/app", { error: "Invitation not found." }));
+  }
+
+  if (invitation.email.toLowerCase() !== userEmail) {
+    redirect(withQuery("/app", { error: "Invitation email does not match your account." }));
+  }
+
+  if (invitation.accepted_at) {
+    redirect(withQuery("/app", { message: "Invitation already accepted." }));
+  }
+
+  if (new Date(invitation.expires_at).getTime() < Date.now()) {
+    redirect(withQuery("/app", { error: "Invitation expired." }));
+  }
+
+  const { error: memberError } = await supabase.from("team_members").insert({
+    team_id: invitation.team_id,
+    user_id: user.id,
+    role: invitation.role,
+  });
+
+  if (memberError && !memberError.message.toLowerCase().includes("duplicate")) {
+    redirect(withQuery("/app", { error: memberError.message }));
+  }
+
+  await supabase.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", invitation.id);
+
+  redirect(withQuery("/app", { message: "Invitation accepted." }));
+}

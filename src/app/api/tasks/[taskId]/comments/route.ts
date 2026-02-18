@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 
 interface CreateCommentPayload {
   body: string;
+  parent_comment_id?: string | null;
 }
 
 async function canAccessTask(taskId: string, userId: string) {
@@ -51,15 +52,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ taskId: st
   const canAccess = await canAccessTask(taskId, user.id);
   if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { data, error } = await supabase
+  const { data: comments, error } = await supabase
     .from("task_comments")
-    .select("id, body, author_id, created_at")
+    .select("id, body, author_id, parent_comment_id, created_at")
     .eq("task_id", taskId)
-    .is("parent_comment_id", null)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ comments: data ?? [], currentUserId: user.id });
+
+  const topLevel = (comments ?? []).filter((comment) => comment.parent_comment_id === null);
+  const byParent = new Map<string, typeof comments>();
+  for (const comment of comments ?? []) {
+    if (!comment.parent_comment_id) continue;
+    const list = byParent.get(comment.parent_comment_id) ?? [];
+    list.push(comment);
+    byParent.set(comment.parent_comment_id, list);
+  }
+
+  const result = topLevel.map((comment) => ({
+    ...comment,
+    replies: byParent.get(comment.id) ?? [],
+  }));
+
+  return NextResponse.json({ comments: result, currentUserId: user.id });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
@@ -78,14 +93,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
   const canAccess = await canAccessTask(taskId, user.id);
   if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  let parentCommentId: string | null = null;
+  if (typeof payload.parent_comment_id === "string" && payload.parent_comment_id.trim().length > 0) {
+    const { data: parentComment } = await supabase
+      .from("task_comments")
+      .select("id")
+      .eq("id", payload.parent_comment_id)
+      .eq("task_id", taskId)
+      .maybeSingle();
+    if (!parentComment) {
+      return NextResponse.json({ error: "Parent comment not found." }, { status: 404 });
+    }
+    parentCommentId = parentComment.id;
+  }
+
   const { data, error } = await supabase
     .from("task_comments")
     .insert({
       task_id: taskId,
       body,
       author_id: user.id,
+      parent_comment_id: parentCommentId,
     })
-    .select("id, body, author_id, created_at")
+    .select("id, body, author_id, parent_comment_id, created_at")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

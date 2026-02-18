@@ -41,7 +41,9 @@ interface CommentItem {
   id: string;
   body: string;
   author_id: string;
+  parent_comment_id: string | null;
   created_at: string;
+  replies?: CommentItem[];
 }
 
 interface SubtaskItem {
@@ -140,6 +142,7 @@ function TaskDetailModal({
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
+  const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
   const [loadingComments, setLoadingComments] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -236,6 +239,25 @@ function TaskDetailModal({
         return;
       }
       setCommentBody("");
+      await fetchComments();
+    });
+  };
+
+  const postReply = (parentCommentId: string) => {
+    const body = replyBodies[parentCommentId]?.trim();
+    if (!body) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body, parent_comment_id: parentCommentId }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to post reply.");
+        return;
+      }
+      setReplyBodies((prev) => ({ ...prev, [parentCommentId]: "" }));
       await fetchComments();
     });
   };
@@ -493,6 +515,57 @@ function TaskDetailModal({
                     </button>
                   </div>
                 ) : null}
+
+                <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  {(comment.replies ?? []).map((reply) => (
+                    <div key={reply.id} className="rounded border border-slate-200 bg-slate-50 p-2">
+                      <p className="text-slate-800">{reply.body}</p>
+                      <p className="mt-1 text-slate-500">
+                        {reply.author_id} / {new Date(reply.created_at).toLocaleString()}
+                      </p>
+                      {currentUserId === reply.author_id ? (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => editComment(reply)}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteComment(reply)}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+
+                  <div className="flex gap-2">
+                    <input
+                      value={replyBodies[comment.id] ?? ""}
+                      onChange={(e) =>
+                        setReplyBodies((prev) => ({
+                          ...prev,
+                          [comment.id]: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+                      placeholder="Reply..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => postReply(comment.id)}
+                      disabled={saving}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs"
+                    >
+                      Reply
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
             {!loadingComments && comments.length === 0 ? (

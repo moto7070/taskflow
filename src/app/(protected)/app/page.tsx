@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { logoutAction } from "@/app/(public)/auth/actions";
 import { requireUserId } from "@/lib/rbac/guards";
-import { createProjectAction, createTeamAction } from "@/lib/server/team-actions";
+import { createProjectAction, createTeamAction, removeProjectAction } from "@/lib/server/team-actions";
 import { createClient } from "@/utils/supabase/server";
 
 interface DashboardPageProps {
@@ -166,6 +166,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       >
                         Wiki
                       </Link>
+                      {membership.role === "admin" ? (
+                        <form action={removeProjectAction}>
+                          <input type="hidden" name="team_id" value={project.team_id} />
+                          <input type="hidden" name="project_id" value={project.id} />
+                          <button
+                            type="submit"
+                            className="rounded-md border border-rose-300 px-3 py-2 text-xs text-rose-700 hover:bg-rose-50"
+                          >
+                            Delete
+                          </button>
+                        </form>
+                      ) : null}
                     </div>
                   </div>
                 );

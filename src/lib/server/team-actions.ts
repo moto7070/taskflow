@@ -112,7 +112,64 @@ export async function createProjectAction(formData: FormData) {
     redirect(withQuery("/app", { error: toPublicErrorMessage(pmError, "Failed to add project owner.") }));
   }
 
+  await writeAuditLog(supabase, {
+    teamId,
+    actorUserId: user.id,
+    action: "project.created",
+    targetType: "project",
+    targetId: project.id,
+    projectId: project.id,
+    metadata: {
+      name: projectName,
+    },
+  });
+
   redirect(withQuery("/app", { message: "Project created." }));
+}
+
+export async function removeProjectAction(formData: FormData) {
+  const teamId = getString(formData, "team_id");
+  const projectId = getString(formData, "project_id");
+
+  if (!teamId || !projectId) {
+    redirect(withQuery("/app", { error: "Missing parameters." }));
+  }
+
+  const { supabase, user } = await requireUser();
+  const canManage = await assertTeamAdmin(teamId, user.id);
+  if (!canManage) {
+    redirect(withQuery("/app", { error: "Only team admins can remove projects." }));
+  }
+
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id, team_id, name")
+    .eq("id", projectId)
+    .eq("team_id", teamId)
+    .maybeSingle();
+
+  if (projectError || !project) {
+    redirect(withQuery("/app", { error: "Project not found." }));
+  }
+
+  const { error } = await supabase.from("projects").delete().eq("id", projectId).eq("team_id", teamId);
+
+  if (error) {
+    redirect(withQuery("/app", { error: toPublicErrorMessage(error, "Failed to remove project.") }));
+  }
+
+  await writeAuditLog(supabase, {
+    teamId,
+    actorUserId: user.id,
+    action: "project.removed",
+    targetType: "project",
+    targetId: projectId,
+    metadata: {
+      name: project.name,
+    },
+  });
+
+  redirect(withQuery("/app", { message: "Project removed." }));
 }
 
 export async function inviteMemberAction(formData: FormData) {

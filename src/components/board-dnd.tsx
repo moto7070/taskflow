@@ -43,6 +43,13 @@ interface CommentItem {
   created_at: string;
 }
 
+interface SubtaskItem {
+  id: string;
+  title: string;
+  is_done: boolean;
+  sort_order: number;
+}
+
 interface AssigneeCandidate {
   id: string;
   display_name: string | null;
@@ -123,6 +130,9 @@ function TaskDetailModal({
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentBody, setCommentBody] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
+  const [subtasks, setSubtasks] = useState<SubtaskItem[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [saving, startSaving] = useTransition();
 
   const fetchTaskDetails = useCallback(async () => {
@@ -157,13 +167,22 @@ function TaskDetailModal({
     setLoadingComments(false);
   }, [task.id]);
 
+  const fetchSubtasks = useCallback(async () => {
+    setLoadingSubtasks(true);
+    const res = await fetch(`/api/tasks/${task.id}/subtasks`);
+    const json = (await res.json()) as { subtasks?: SubtaskItem[] };
+    setSubtasks(json.subtasks ?? []);
+    setLoadingSubtasks(false);
+  }, [task.id]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchTaskDetails();
       void fetchComments();
+      void fetchSubtasks();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchComments, fetchTaskDetails]);
+  }, [fetchComments, fetchSubtasks, fetchTaskDetails]);
 
   const saveTask = () => {
     startSaving(async () => {
@@ -202,6 +221,54 @@ function TaskDetailModal({
       }
       setCommentBody("");
       await fetchComments();
+    });
+  };
+
+  const createSubtask = () => {
+    if (!newSubtaskTitle.trim()) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/subtasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newSubtaskTitle }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to create subtask.");
+        return;
+      }
+      setNewSubtaskTitle("");
+      await fetchSubtasks();
+    });
+  };
+
+  const updateSubtask = (subtaskId: string, updates: { title?: string; is_done?: boolean }) => {
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to update subtask.");
+        return;
+      }
+      await fetchSubtasks();
+    });
+  };
+
+  const deleteSubtask = (subtaskId: string) => {
+    startSaving(async () => {
+      const res = await fetch(`/api/tasks/${task.id}/subtasks/${subtaskId}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        window.alert(json.error ?? "Failed to delete subtask.");
+        return;
+      }
+      await fetchSubtasks();
     });
   };
 
@@ -270,6 +337,57 @@ function TaskDetailModal({
             >
               Save
             </button>
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-slate-200 pt-4">
+          <h4 className="text-sm font-semibold text-slate-900">Subtasks</h4>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newSubtaskTitle}
+              onChange={(e) => setNewSubtaskTitle(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Add subtask"
+            />
+            <button
+              type="button"
+              onClick={createSubtask}
+              disabled={saving}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              Add
+            </button>
+          </div>
+          <div className="mt-3 max-h-36 space-y-2 overflow-auto">
+            {loadingSubtasks ? <p className="text-xs text-slate-500">Loading subtasks...</p> : null}
+            {subtasks.map((subtask) => (
+              <div key={subtask.id} className="flex items-center gap-2 rounded-md border border-slate-200 p-2">
+                <input
+                  type="checkbox"
+                  checked={subtask.is_done}
+                  onChange={(e) => updateSubtask(subtask.id, { is_done: e.target.checked })}
+                />
+                <input
+                  defaultValue={subtask.title}
+                  onBlur={(e) => {
+                    const nextTitle = e.target.value.trim();
+                    if (!nextTitle || nextTitle === subtask.title) return;
+                    updateSubtask(subtask.id, { title: nextTitle });
+                  }}
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => deleteSubtask(subtask.id)}
+                  className="rounded border border-slate-300 px-2 py-1 text-xs"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+            {!loadingSubtasks && subtasks.length === 0 ? (
+              <p className="text-xs text-slate-500">No subtasks yet.</p>
+            ) : null}
           </div>
         </div>
 

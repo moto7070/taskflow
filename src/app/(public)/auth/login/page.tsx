@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { loginAction } from "../actions";
+import { googleLoginAction, loginAction } from "../actions";
 
 interface LoginPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -57,6 +57,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           ログイン
+        </button>
+      </form>
+      <div className="mt-4 flex items-center gap-2">
+        <div className="h-px flex-1 bg-slate-200" />
+        <p className="text-xs text-slate-500">or</p>
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+      <form action={googleLoginAction} className="mt-4">
+        <input type="hidden" name="next" value="/app" />
+        <button
+          type="submit"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Continue with Google
         </button>
       </form>
       <Link href="/auth/forgot-password" className="mt-4 text-sm text-slate-600 underline">

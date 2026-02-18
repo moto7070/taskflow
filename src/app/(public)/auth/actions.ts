@@ -60,6 +60,28 @@ export async function loginAction(formData: FormData) {
   redirect("/app");
 }
 
+export async function googleLoginAction(formData: FormData) {
+  const next = getString(formData, "next") || "/app";
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${getAppUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+    },
+  });
+
+  if (error || !data.url) {
+    redirect(
+      withQuery("/auth/login", {
+        error: error?.message ?? "Google login could not be started.",
+      }),
+    );
+  }
+
+  redirect(data.url);
+}
+
 export async function forgotPasswordAction(formData: FormData) {
   const email = getString(formData, "email");
 

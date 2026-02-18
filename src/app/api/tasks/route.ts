@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createTaskSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -11,6 +12,19 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const rateLimit = consumeRateLimit({
+    scope: "tasks:create",
+    userId: user.id,
+    request: req,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests", retry_after: rateLimit.retryAfterSec },
+      { status: 429 },
+    );
   }
 
   const parsed = createTaskSchema.safeParse(await req.json());

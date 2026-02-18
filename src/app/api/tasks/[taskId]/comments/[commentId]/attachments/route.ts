@@ -6,6 +6,7 @@ import {
   getCommentAttachmentMaxBytes,
   getCommentAttachmentsBucket,
 } from "@/lib/env";
+import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
@@ -103,6 +104,19 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rateLimit = consumeRateLimit({
+    scope: "attachments:upload",
+    userId: user.id,
+    request: req,
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests", retry_after: rateLimit.retryAfterSec },
+      { status: 429 },
+    );
+  }
 
   const canAccess = await canAccessTask(taskId, user.id);
   if (!canAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

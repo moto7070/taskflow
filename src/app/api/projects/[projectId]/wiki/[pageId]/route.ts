@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { consumeRateLimit } from "@/lib/server/rate-limit";
 import { updateWikiPageSchema } from "@/lib/validations/api";
 import { createClient } from "@/utils/supabase/server";
 
@@ -43,6 +44,19 @@ export async function PATCH(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rateLimit = consumeRateLimit({
+    scope: "wiki:update",
+    userId: user.id,
+    request: req,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests", retry_after: rateLimit.retryAfterSec },
+      { status: 429 },
+    );
+  }
 
   const hasAccess = await canAccessProject(projectId, user.id);
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -96,7 +110,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _: Request,
+  req: Request,
   { params }: { params: Promise<{ projectId: string; pageId: string }> },
 ) {
   const { projectId, pageId } = await params;
@@ -106,6 +120,19 @@ export async function DELETE(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rateLimit = consumeRateLimit({
+    scope: "wiki:delete",
+    userId: user.id,
+    request: req,
+    limit: 15,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests", retry_after: rateLimit.retryAfterSec },
+      { status: 429 },
+    );
+  }
 
   const hasAccess = await canAccessProject(projectId, user.id);
   if (!hasAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

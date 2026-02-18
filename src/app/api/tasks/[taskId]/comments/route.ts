@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCommentAttachmentsBucket } from "@/lib/env";
+import { consumeRateLimit } from "@/lib/server/rate-limit";
 import type { ReactionSummaryItem } from "@/lib/types/domain";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
@@ -200,6 +201,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rateLimit = consumeRateLimit({
+    scope: "comments:create",
+    userId: user.id,
+    request: req,
+    limit: 40,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests", retry_after: rateLimit.retryAfterSec },
+      { status: 429 },
+    );
+  }
 
   const access = await canAccessTask(taskId, user.id);
   if (!access.ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
